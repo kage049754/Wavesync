@@ -77,9 +77,9 @@ private fun WaveSyncApp(activity: MainActivity) {
     var hasPermission by remember { mutableStateOf(hasBluetoothPermission(activity)) }
     var deviceName by remember { mutableStateOf("No earbuds selected") }
     var connected by remember { mutableStateOf(false) }
+    val preferences = remember { activity.getSharedPreferences("wavesync_audio", Context.MODE_PRIVATE) }
     var autoReconnect by remember { mutableStateOf(preferences.getBoolean("auto_reconnect", true)) }
     var eqEnabled by remember { mutableStateOf(preferences.getBoolean("eq_enabled", true)) }
-    val preferences = remember { activity.getSharedPreferences("wavesync_audio", Context.MODE_PRIVATE) }
     var ambience by remember { mutableFloatStateOf(preferences.getFloat("ambience", 0.25f)) }
     var bass by remember { mutableFloatStateOf(preferences.getFloat("bass", 0.35f)) }
     var clarity by remember { mutableFloatStateOf(preferences.getFloat("clarity", 0.55f)) }
