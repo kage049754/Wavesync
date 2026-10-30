@@ -11,6 +11,10 @@ import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioManager
@@ -299,9 +303,9 @@ private fun WaveSyncApp(activity: MainActivity) {
             }
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    MetricCard("LEFT BUD", "—", "Not exposed", Modifier.weight(1f))
-                    MetricCard("RIGHT BUD", "—", "Not exposed", Modifier.weight(1f))
-                    MetricCard("CASE", "—", "Not exposed", Modifier.weight(1f))
+                    MetricCard("LEFT BUD", leftBattery?.let { "$it%" } ?: "—", if (leftBattery != null) "Reported" else "Not reported", Modifier.weight(1f))
+                    MetricCard("RIGHT BUD", rightBattery?.let { "$it%" } ?: "—", if (rightBattery != null) "Reported" else "Not reported", Modifier.weight(1f))
+                    MetricCard("CASE", caseBattery?.let { "$it%" } ?: "—", if (caseBattery != null) "Reported" else "Not reported", Modifier.weight(1f))
                 }
             }
             item {
@@ -312,6 +316,36 @@ private fun WaveSyncApp(activity: MainActivity) {
                             Text(genericBattery?.let { "$batteryDeviceName reported $it% (single battery value)" } ?: batteryStatus, color = Muted, fontSize = 10.sp, lineHeight = 14.sp)
                         }
                         TextButton(onClick = { startBatteryDiscovery() }) { Text("SCAN", color = Cyan, fontSize = 10.sp) }
+                    }
+                }
+            }
+            item {
+                SectionHeader("Notification controls", "PHONE")
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Panel).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Notification access", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Text(if (hasNotificationAccess(activity)) "Access granted by Android" else "Allow access in Android settings", color = Muted, fontSize = 10.sp)
+                        }
+                        TextButton(onClick = { activity.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }) { Text("SET UP", color = Cyan) }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Capture notification previews", fontSize = 12.sp)
+                            Text("Stores the latest preview locally. It does not read messages aloud or forward them to earbuds.", color = Muted, fontSize = 10.sp, lineHeight = 14.sp)
+                        }
+                        Switch(checked = preferences.getBoolean("notification_sync", false), onCheckedChange = { preferences.edit().putBoolean("notification_sync", it).apply() })
+                    }
+                    Text(preferences.getString("latest_notification", "No notification preview captured") ?: "No notification preview captured", color = Muted, fontSize = 10.sp, lineHeight = 14.sp)
+                }
+            }
+            item {
+                SectionHeader("Lock-screen controls", "MEDIA")
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(16.dp)) {
+                    Text("Playback shortcuts in the lock screen and notification shade.", color = Muted, fontSize = 11.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Button(onClick = { showLockScreenMediaNotification(activity) }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Ink)) {
+                        Icon(Icons.Rounded.Lock, null); Spacer(Modifier.width(8.dp)); Text("Enable lock-screen controls")
                     }
                 }
             }
@@ -499,4 +533,38 @@ private fun FeatureRow(icon: androidx.compose.ui.graphics.vector.ImageVector, ti
         Column(Modifier.weight(1f)) { Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold); Text(subtitle, color = Muted, fontSize = 10.sp, lineHeight = 14.sp) }
         TextButton(onClick = onClick) { Text(action, fontSize = 9.sp, color = Violet, fontWeight = FontWeight.Bold) }
     }
+}
+
+private fun hasNotificationAccess(context: Context): Boolean {
+    val enabled = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners") ?: return false
+    return enabled.split(":").any { it.contains(context.packageName) }
+}
+
+private fun showLockScreenMediaNotification(context: Context) {
+    if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+        androidx.core.app.ActivityCompat.requestPermissions(context as ComponentActivity, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 4101)
+        return
+    }
+    val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    val channelId = "wavesync_media_controls"
+    if (Build.VERSION.SDK_INT >= 26) manager.createNotificationChannel(NotificationChannel(channelId, "WaveSync playback controls", NotificationManager.IMPORTANCE_LOW).apply { lockscreenVisibility = Notification.VISIBILITY_PUBLIC })
+    fun action(label: String, icon: Int, key: Int, request: Int): Notification.Action {
+        val intent = Intent(context, MediaActionReceiver::class.java).setAction("com.wavesync.MEDIA_" + key)
+        val pending = PendingIntent.getBroadcast(context, request, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        return Notification.Action.Builder(icon, label, pending).build()
+    }
+    val open = PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    val notification = Notification.Builder(context, channelId)
+        .setSmallIcon(android.R.drawable.ic_media_play)
+        .setContentTitle("WaveSync audio controls")
+        .setContentText("Control the active music player")
+        .setContentIntent(open)
+        .setVisibility(Notification.VISIBILITY_PUBLIC)
+        .setCategory(Notification.CATEGORY_TRANSPORT)
+        .setOngoing(true)
+        .addAction(action("Previous", android.R.drawable.ic_media_previous, android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS, 1))
+        .addAction(action("Play / pause", android.R.drawable.ic_media_play, android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, 2))
+        .addAction(action("Next", android.R.drawable.ic_media_next, android.view.KeyEvent.KEYCODE_MEDIA_NEXT, 3))
+        .build()
+    manager.notify(4101, notification)
 }
