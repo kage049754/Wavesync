@@ -6,7 +6,13 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioManager
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
 import android.media.ToneGenerator
+import android.media.audiofx.Equalizer
+import android.media.audiofx.Virtualizer
+import android.os.Handler
+import android.os.Looper
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -23,6 +29,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -64,6 +72,41 @@ private fun WaveSyncApp(activity: MainActivity) {
     var message by remember { mutableStateOf("Pair your earbuds to get started") }
     var showDevices by remember { mutableStateOf(false) }
     var pairedDevices by remember { mutableStateOf(listOf<String>()) }
+    var equalizerStatus by remember { mutableStateOf("Audio effects not initialized") }
+    val audioManager = remember { activity.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
+    val audioFx = remember { AudioFxController() }
+
+    fun refreshAudioRoute() {
+        val route = try {
+            audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).firstOrNull { device ->
+                device.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                    device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                    (Build.VERSION.SDK_INT >= 31 && device.type == AudioDeviceInfo.TYPE_BLE_HEADSET)
+            }
+        } catch (_: Exception) { null }
+        connected = route != null
+        if (route != null) deviceName = route.productName?.toString()?.takeIf { it.isNotBlank() } ?: "Bluetooth audio device"
+        else if (deviceName != "No earbuds selected") deviceName = "No active Bluetooth audio"
+    }
+
+    DisposableEffect(audioManager) {
+        val callback = object : AudioDeviceCallback() {
+            override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) { refreshAudioRoute() }
+            override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) { refreshAudioRoute() }
+        }
+        audioManager.registerAudioDeviceCallback(callback, Handler(Looper.getMainLooper()))
+        refreshAudioRoute()
+        onDispose {
+            audioManager.unregisterAudioDeviceCallback(callback)
+            audioFx.release()
+        }
+    }
+
+    LaunchedEffect(eqEnabled, bass, clarity, ambience) {
+        equalizerStatus = if (audioFx.apply(eqEnabled, bass, clarity, ambience)) {
+            if (eqEnabled) "System output equalizer active where supported" else "Equalizer disabled"
+        } else "This phone does not expose a compatible system audio effect"
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         hasPermission = hasBluetoothPermission(activity)
@@ -123,7 +166,7 @@ private fun WaveSyncApp(activity: MainActivity) {
                     EarbudArt(Modifier.fillMaxWidth().height(128.dp))
                     Spacer(Modifier.height(12.dp))
                     Text(deviceName, fontSize = 21.sp, fontWeight = FontWeight.SemiBold)
-                    Text("Connect any paired Bluetooth audio device", color = Muted, fontSize = 12.sp)
+                    Text(if (connected) "Detected from Android audio output" else "Pair your earbuds in Android Bluetooth settings", color = Muted, fontSize = 12.sp)
                     Spacer(Modifier.height(18.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Button(onClick = { loadDevices() }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Ink), shape = RoundedCornerShape(14.dp)) {
@@ -158,7 +201,7 @@ private fun WaveSyncApp(activity: MainActivity) {
                     EqSlider("Bass", bass, { bass = it }, eqEnabled)
                     EqSlider("Clarity", clarity, { clarity = it }, eqEnabled)
                     EqSlider("Immersion", ambience, { ambience = it }, eqEnabled)
-                    Text("UI profile controls are ready; system-wide equalizer processing requires a compatible audio-effect session.", color = Muted, fontSize = 10.sp, lineHeight = 15.sp)
+                    Text(equalizerStatus, color = if (equalizerStatus.contains("active")) Cyan else Muted, fontSize = 10.sp, lineHeight = 15.sp)
                 }
             }
             item {
@@ -191,10 +234,48 @@ private fun WaveSyncApp(activity: MainActivity) {
         if (showDevices) AlertDialog(
             onDismissRequest = { showDevices = false },
             title = { Text("Paired Bluetooth devices") },
-            text = { Column { if (pairedDevices.isEmpty()) Text("No paired devices found.") else pairedDevices.forEach { name -> TextButton(onClick = { deviceName = name; connected = false; showDevices = false; message = "Selected $name. Connection is managed by Android Bluetooth settings." }) { Text(name) } } } },
+            text = { Column { if (pairedDevices.isEmpty()) Text("No paired devices found. Use Pair device to connect one.") else pairedDevices.forEach { name -> TextButton(onClick = { showDevices = false; activity.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)); message = "Choose $name in Android Bluetooth settings. WaveSync detects the active audio route automatically." }) { Text(name) } } } },
             confirmButton = { TextButton(onClick = { showDevices = false }) { Text("Close") } },
             containerColor = Panel
         )
+    }
+}
+
+private class AudioFxController {
+    private var equalizer: Equalizer? = null
+    private var virtualizer: Virtualizer? = null
+
+    fun apply(enabled: Boolean, bass: Float, clarity: Float, immersion: Float): Boolean {
+        return try {
+            if (equalizer == null) equalizer = Equalizer(0, 0)
+            if (virtualizer == null) virtualizer = try { Virtualizer(0, 0) } catch (_: Exception) { null }
+            val eq = equalizer ?: return false
+            eq.enabled = enabled
+            virtualizer?.enabled = enabled
+            if (enabled) {
+                val bands = eq.numberOfBands.toInt()
+                if (bands > 0) {
+                    val range = eq.bandLevelRange
+                    val min = range[0].toInt()
+                    val max = range[1].toInt()
+                    val lowLevel = (min + (max - min) * bass).toInt().coerceIn(min, max)
+                    val presenceLevel = (min + (max - min) * clarity).toInt().coerceIn(min, max)
+                    eq.setBandLevel(0.toShort(), lowLevel.toShort())
+                    eq.setBandLevel(minOf(3, bands - 1).toShort(), presenceLevel.toShort())
+                }
+                virtualizer?.let { effect ->
+                    effect.setStrength((immersion * 1000).toInt().coerceIn(0, 1000).toShort())
+                }
+            }
+            true
+        } catch (_: Exception) { false }
+    }
+
+    fun release() {
+        try { equalizer?.release() } catch (_: Exception) {}
+        try { virtualizer?.release() } catch (_: Exception) {}
+        equalizer = null
+        virtualizer = null
     }
 }
 
