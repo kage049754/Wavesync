@@ -77,8 +77,8 @@ private fun WaveSyncApp(activity: MainActivity) {
     var hasPermission by remember { mutableStateOf(hasBluetoothPermission(activity)) }
     var deviceName by remember { mutableStateOf("No earbuds selected") }
     var connected by remember { mutableStateOf(false) }
-    var autoReconnect by remember { mutableStateOf(true) }
-    var eqEnabled by remember { mutableStateOf(true) }
+    var autoReconnect by remember { mutableStateOf(preferences.getBoolean("auto_reconnect", true)) }
+    var eqEnabled by remember { mutableStateOf(preferences.getBoolean("eq_enabled", true)) }
     val preferences = remember { activity.getSharedPreferences("wavesync_audio", Context.MODE_PRIVATE) }
     var ambience by remember { mutableFloatStateOf(preferences.getFloat("ambience", 0.25f)) }
     var bass by remember { mutableFloatStateOf(preferences.getFloat("bass", 0.35f)) }
@@ -88,11 +88,11 @@ private fun WaveSyncApp(activity: MainActivity) {
     var showDevices by remember { mutableStateOf(false) }
     var pairedDevices by remember { mutableStateOf(listOf<String>()) }
     var equalizerStatus by remember { mutableStateOf("Audio effects not initialized") }
-    var leftBattery by remember { mutableStateOf<Int?>(null) }
-    var rightBattery by remember { mutableStateOf<Int?>(null) }
-    var caseBattery by remember { mutableStateOf<Int?>(null) }
-    var genericBattery by remember { mutableStateOf<Int?>(null) }
-    var batteryDeviceName by remember { mutableStateOf("") }
+    var leftBattery by remember { mutableStateOf<Int?>(if (preferences.contains("battery_left")) preferences.getInt("battery_left", -1).takeIf { it >= 0 } else null) }
+    var rightBattery by remember { mutableStateOf<Int?>(if (preferences.contains("battery_right")) preferences.getInt("battery_right", -1).takeIf { it >= 0 } else null) }
+    var caseBattery by remember { mutableStateOf<Int?>(if (preferences.contains("battery_case")) preferences.getInt("battery_case", -1).takeIf { it >= 0 } else null) }
+    var genericBattery by remember { mutableStateOf<Int?>(if (preferences.contains("battery_generic")) preferences.getInt("battery_generic", -1).takeIf { it >= 0 } else null) }
+    var batteryDeviceName by remember { mutableStateOf(preferences.getString("battery_device_name", "") ?: "") }
     var batteryStatus by remember { mutableStateOf("Tap SCAN to check standard Bluetooth battery reporting") }
     var notificationSyncEnabled by remember { mutableStateOf(preferences.getBoolean("notification_sync", false)) }
     var latestNotificationPreview by remember { mutableStateOf(preferences.getString("latest_notification", "No notification preview captured") ?: "No notification preview captured") }
@@ -130,12 +130,14 @@ private fun WaveSyncApp(activity: MainActivity) {
         }
     }
 
-    LaunchedEffect(bass, clarity, ambience, selectedPreset) {
+    LaunchedEffect(bass, clarity, ambience, selectedPreset, eqEnabled, autoReconnect) {
         preferences.edit()
             .putFloat("bass", bass)
             .putFloat("clarity", clarity)
             .putFloat("ambience", ambience)
             .putString("preset", selectedPreset)
+            .putBoolean("eq_enabled", eqEnabled)
+            .putBoolean("auto_reconnect", autoReconnect)
             .apply()
     }
 
@@ -200,12 +202,14 @@ private fun WaveSyncApp(activity: MainActivity) {
                                 val name = try { gatt.device.name ?: "Bluetooth device" } catch (_: Exception) { "Bluetooth device" }
                                 activity.runOnUiThread {
                                     batteryDeviceName = name
+                                    val savedBattery = preferences.edit().putString("battery_device_name", name)
                                     when {
-                                        name.contains("left", true) -> leftBattery = level
-                                        name.contains("right", true) -> rightBattery = level
-                                        name.contains("case", true) -> caseBattery = level
-                                        else -> genericBattery = level
+                                        name.contains("left", true) -> { leftBattery = level; savedBattery.putInt("battery_left", level) }
+                                        name.contains("right", true) -> { rightBattery = level; savedBattery.putInt("battery_right", level) }
+                                        name.contains("case", true) -> { caseBattery = level; savedBattery.putInt("battery_case", level) }
+                                        else -> { genericBattery = level; savedBattery.putInt("battery_generic", level) }
                                     }
+                                    savedBattery.apply()
                                     batteryStatus = "Battery Service reported ${level}% from $name"
                                 }
                             }
@@ -365,7 +369,7 @@ private fun WaveSyncApp(activity: MainActivity) {
                 Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Panel).padding(18.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) { Text("Personal sound", fontWeight = FontWeight.SemiBold, fontSize = 16.sp); Text("Software audio profile", color = Muted, fontSize = 11.sp) }
-                        Switch(checked = eqEnabled, onCheckedChange = { eqEnabled = it })
+                        Switch(checked = eqEnabled, onCheckedChange = { eqEnabled = it; preferences.edit().putBoolean("eq_enabled", it).apply() })
                     }
                     Text("Sound profiles", color = Muted, fontSize = 11.sp)
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
@@ -413,7 +417,7 @@ private fun WaveSyncApp(activity: MainActivity) {
                             Text("Automatic reconnect", fontWeight = FontWeight.SemiBold)
                             Text("Android reconnects previously paired devices when available", color = Muted, fontSize = 10.sp, lineHeight = 14.sp)
                         }
-                        Switch(checked = autoReconnect, onCheckedChange = { autoReconnect = it })
+                        Switch(checked = autoReconnect, onCheckedChange = { autoReconnect = it; preferences.edit().putBoolean("auto_reconnect", it).apply() })
                     }
                 }
             }
