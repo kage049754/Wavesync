@@ -147,7 +147,8 @@ private fun WaveSyncApp(activity: MainActivity) {
     fun startBatteryDiscovery() {
         if (!hasPermission) {
             batteryStatus = "Bluetooth permission is required to read battery data"
-            loadDevices()
+            val permissions = if (Build.VERSION.SDK_INT >= 31) arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN) else arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+            permissionLauncher.launch(permissions)
             return
         }
         leftBattery = null
