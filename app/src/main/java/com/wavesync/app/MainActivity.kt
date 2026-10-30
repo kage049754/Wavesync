@@ -2,6 +2,14 @@ package com.wavesync.app
 
 import android.Manifest
 import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattCallback
+import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothProfile
+import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanResult
+import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -13,6 +21,7 @@ import android.media.audiofx.Equalizer
 import android.media.audiofx.Virtualizer
 import android.os.Handler
 import android.os.Looper
+import java.util.UUID
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -75,6 +84,15 @@ private fun WaveSyncApp(activity: MainActivity) {
     var showDevices by remember { mutableStateOf(false) }
     var pairedDevices by remember { mutableStateOf(listOf<String>()) }
     var equalizerStatus by remember { mutableStateOf("Audio effects not initialized") }
+    var leftBattery by remember { mutableStateOf<Int?>(null) }
+    var rightBattery by remember { mutableStateOf<Int?>(null) }
+    var caseBattery by remember { mutableStateOf<Int?>(null) }
+    var genericBattery by remember { mutableStateOf<Int?>(null) }
+    var batteryDeviceName by remember { mutableStateOf("") }
+    var batteryStatus by remember { mutableStateOf("Tap SCAN to check standard Bluetooth battery reporting") }
+    val batteryGattConnections = remember { mutableStateListOf<BluetoothGatt>() }
+    val batteryServiceUuid = remember { UUID.fromString("0000180F-0000-1000-8000-00805F9B34FB") }
+    val batteryLevelUuid = remember { UUID.fromString("00002A19-0000-1000-8000-00805F9B34FB") }
     val audioManager = remember { activity.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
     val audioFx = remember { AudioFxController() }
 
@@ -101,6 +119,8 @@ private fun WaveSyncApp(activity: MainActivity) {
         onDispose {
             audioManager.unregisterAudioDeviceCallback(callback)
             audioFx.release()
+            batteryGattConnections.toList().forEach { try { it.disconnect(); it.close() } catch (_: Exception) {} }
+            batteryGattConnections.clear()
         }
     }
 
@@ -122,6 +142,88 @@ private fun WaveSyncApp(activity: MainActivity) {
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         hasPermission = hasBluetoothPermission(activity)
         if (hasPermission) message = "Bluetooth access enabled"
+    }
+
+    fun startBatteryDiscovery() {
+        if (!hasPermission) {
+            batteryStatus = "Bluetooth permission is required to read battery data"
+            loadDevices()
+            return
+        }
+        leftBattery = null
+        rightBattery = null
+        caseBattery = null
+        genericBattery = null
+        batteryDeviceName = ""
+        batteryStatus = "Checking paired earbuds for the standard Bluetooth Battery Service…"
+        try {
+            val adapter = (activity.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
+            val bonded = adapter?.bondedDevices.orEmpty()
+            val scanner = adapter?.bluetoothLeScanner
+            if (scanner == null) {
+                batteryStatus = "Bluetooth LE scanning is unavailable on this phone"
+                return
+            }
+            val bondedAddresses = bonded.map { it.address }.toSet()
+            val callback = object : ScanCallback() {
+                override fun onScanResult(callbackType: Int, result: ScanResult) {
+                    val device = result.device
+                    if (device.address !in bondedAddresses) return
+                    if (batteryGattConnections.any { it.device.address == device.address }) return
+                    try {
+                        val gatt = device.connectGatt(activity, false, object : BluetoothGattCallback() {
+                            override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+                                if (status == BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_CONNECTED) {
+                                    gatt.discoverServices()
+                                } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                                    try { gatt.close() } catch (_: Exception) {}
+                                }
+                            }
+                            override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+                                if (status != BluetoothGatt.GATT_SUCCESS) return
+                                val characteristic = gatt.getService(batteryServiceUuid)?.getCharacteristic(batteryLevelUuid)
+                                if (characteristic != null) {
+                                    try { gatt.readCharacteristic(characteristic) } catch (_: Exception) {}
+                                }
+                            }
+                            override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray, status: Int) {
+                                if (status != BluetoothGatt.GATT_SUCCESS || characteristic.uuid != batteryLevelUuid || value.isEmpty()) return
+                                val level = value[0].toInt() and 0xFF
+                                if (level !in 0..100) return
+                                val name = try { gatt.device.name ?: "Bluetooth device" } catch (_: Exception) { "Bluetooth device" }
+                                activity.runOnUiThread {
+                                    batteryDeviceName = name
+                                    when {
+                                        name.contains("left", true) -> leftBattery = level
+                                        name.contains("right", true) -> rightBattery = level
+                                        name.contains("case", true) -> caseBattery = level
+                                        else -> genericBattery = level
+                                    }
+                                    batteryStatus = "Battery Service reported ${level}% from $name"
+                                }
+                            }
+                        }, BluetoothDevice.TRANSPORT_LE)
+                        batteryGattConnections.add(gatt)
+                    } catch (_: SecurityException) {
+                        batteryStatus = "Allow Nearby devices permission to read battery data"
+                    } catch (_: Exception) { }
+                }
+                override fun onScanFailed(errorCode: Int) {
+                    batteryStatus = "Bluetooth scan failed (code $errorCode)"
+                }
+            }
+            scanner.startScan(null, ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(), callback)
+            Handler(Looper.getMainLooper()).postDelayed({
+                try { scanner.stopScan(callback) } catch (_: Exception) {}
+                if (genericBattery == null && leftBattery == null && rightBattery == null && caseBattery == null) {
+                    batteryStatus = "No standard battery data received. Some earbuds only expose battery through their own companion app."
+                }
+            }, 12000)
+        } catch (_: SecurityException) {
+            batteryStatus = "Bluetooth permission is required"
+        } catch (_: Exception) {
+            batteryStatus = "Could not start Bluetooth battery discovery"
+        }
     }
 
     fun loadDevices() {
@@ -192,6 +294,17 @@ private fun WaveSyncApp(activity: MainActivity) {
                     MetricCard("LEFT BUD", "—", "Not exposed", Modifier.weight(1f))
                     MetricCard("RIGHT BUD", "—", "Not exposed", Modifier.weight(1f))
                     MetricCard("CASE", "—", "Not exposed", Modifier.weight(1f))
+                }
+            }
+            item {
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Panel).padding(14.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Battery diagnostics", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text(genericBattery?.let { "$batteryDeviceName reported $it% (single battery value)" } ?: batteryStatus, color = Muted, fontSize = 10.sp, lineHeight = 14.sp)
+                        }
+                        TextButton(onClick = { startBatteryDiscovery() }) { Text("SCAN", color = Cyan, fontSize = 10.sp) }
+                    }
                 }
             }
             item {
