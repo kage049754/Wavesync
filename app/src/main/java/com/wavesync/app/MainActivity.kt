@@ -94,6 +94,8 @@ private fun WaveSyncApp(activity: MainActivity) {
     var genericBattery by remember { mutableStateOf<Int?>(null) }
     var batteryDeviceName by remember { mutableStateOf("") }
     var batteryStatus by remember { mutableStateOf("Tap SCAN to check standard Bluetooth battery reporting") }
+    var notificationSyncEnabled by remember { mutableStateOf(preferences.getBoolean("notification_sync", false)) }
+    var latestNotificationPreview by remember { mutableStateOf(preferences.getString("latest_notification", "No notification preview captured") ?: "No notification preview captured") }
     val batteryGattConnections = remember { mutableListOf<BluetoothGatt>() }
     val batteryServiceUuid = remember { UUID.fromString("0000180F-0000-1000-8000-00805F9B34FB") }
     val batteryLevelUuid = remember { UUID.fromString("00002A19-0000-1000-8000-00805F9B34FB") }
@@ -334,9 +336,10 @@ private fun WaveSyncApp(activity: MainActivity) {
                             Text("Capture notification previews", fontSize = 12.sp)
                             Text("Stores the latest preview locally. It does not read messages aloud or forward them to earbuds.", color = Muted, fontSize = 10.sp, lineHeight = 14.sp)
                         }
-                        Switch(checked = preferences.getBoolean("notification_sync", false), onCheckedChange = { preferences.edit().putBoolean("notification_sync", it).apply() })
+                        Switch(checked = notificationSyncEnabled, onCheckedChange = { notificationSyncEnabled = it; preferences.edit().putBoolean("notification_sync", it).apply() })
                     }
-                    Text(preferences.getString("latest_notification", "No notification preview captured") ?: "No notification preview captured", color = Muted, fontSize = 10.sp, lineHeight = 14.sp)
+                    Text(latestNotificationPreview, color = Muted, fontSize = 10.sp, lineHeight = 14.sp)
+                    TextButton(onClick = { latestNotificationPreview = preferences.getString("latest_notification", "No notification preview captured") ?: "No notification preview captured" }) { Text("REFRESH PREVIEW", color = Violet, fontSize = 9.sp) }
                 }
             }
             item {
