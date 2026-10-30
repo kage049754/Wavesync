@@ -326,22 +326,31 @@ private fun WaveSyncApp(activity: MainActivity) {
                 }
             }
             item {
-                SectionHeader("Notification controls", "PHONE")
+                SectionHeader("Notification controls", "OPTIONAL ACCESS")
                 Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Panel).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Notification preview access is optional. WaveSync needs Android's notification-listener permission to capture previews; Android warns that this access can expose notifications from all apps, including private messages and verification codes.", color = Muted, fontSize = 10.sp, lineHeight = 15.sp)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text("Notification access", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                            Text(if (hasNotificationAccess(activity)) "Access granted by Android" else "Allow access in Android settings", color = Muted, fontSize = 10.sp)
+                            Text("Android notification access", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text(if (hasNotificationAccess(activity)) "Permission currently enabled" else "Permission not enabled", color = Muted, fontSize = 10.sp)
                         }
-                        TextButton(onClick = { activity.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }) { Text("SET UP", color = Cyan) }
+                        TextButton(onClick = { activity.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }) { Text("ANDROID SETTINGS", color = Cyan, fontSize = 9.sp) }
                     }
+                    Divider(color = Panel2)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text("Capture notification previews", fontSize = 12.sp)
-                            Text("Stores the latest preview locally. It does not read messages aloud or forward them to earbuds.", color = Muted, fontSize = 10.sp, lineHeight = 14.sp)
+                            Text("Capture notification previews", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Off by default. When enabled, WaveSync saves only the latest captured preview in its local app preferences. The current implementation does not upload it to a server or read it aloud.", color = Muted, fontSize = 10.sp, lineHeight = 14.sp)
                         }
-                        Switch(checked = notificationSyncEnabled, onCheckedChange = { notificationSyncEnabled = it; preferences.edit().putBoolean("notification_sync", it).apply() })
+                        Switch(checked = notificationSyncEnabled, onCheckedChange = { enabled ->
+                            notificationSyncEnabled = enabled
+                            preferences.edit().putBoolean("notification_sync", enabled).apply()
+                            if (enabled && !hasNotificationAccess(activity)) {
+                                activity.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                            }
+                        })
                     }
+                    Text("You can turn capture off here or revoke WaveSync's notification access in Android Settings at any time. Avoid enabling it if you do not want notification content accessible to the app.", color = Muted, fontSize = 10.sp, lineHeight = 14.sp)
                     Text(latestNotificationPreview, color = Muted, fontSize = 10.sp, lineHeight = 14.sp)
                     TextButton(onClick = { latestNotificationPreview = preferences.getString("latest_notification", "No notification preview captured") ?: "No notification preview captured" }) { Text("REFRESH PREVIEW", color = Violet, fontSize = 9.sp) }
                 }
