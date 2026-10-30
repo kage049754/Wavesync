@@ -90,7 +90,7 @@ private fun WaveSyncApp(activity: MainActivity) {
     var genericBattery by remember { mutableStateOf<Int?>(null) }
     var batteryDeviceName by remember { mutableStateOf("") }
     var batteryStatus by remember { mutableStateOf("Tap SCAN to check standard Bluetooth battery reporting") }
-    val batteryGattConnections = remember { mutableStateListOf<BluetoothGatt>() }
+    val batteryGattConnections = remember { mutableListOf<BluetoothGatt>() }
     val batteryServiceUuid = remember { UUID.fromString("0000180F-0000-1000-8000-00805F9B34FB") }
     val batteryLevelUuid = remember { UUID.fromString("00002A19-0000-1000-8000-00805F9B34FB") }
     val audioManager = remember { activity.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
@@ -186,7 +186,7 @@ private fun WaveSyncApp(activity: MainActivity) {
                                     try { gatt.readCharacteristic(characteristic) } catch (_: Exception) {}
                                 }
                             }
-                            override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray, status: Int) {
+                            fun publishBattery(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray, status: Int) {
                                 if (status != BluetoothGatt.GATT_SUCCESS || characteristic.uuid != batteryLevelUuid || value.isEmpty()) return
                                 val level = value[0].toInt() and 0xFF
                                 if (level !in 0..100) return
@@ -201,6 +201,13 @@ private fun WaveSyncApp(activity: MainActivity) {
                                     }
                                     batteryStatus = "Battery Service reported ${level}% from $name"
                                 }
+                            }
+                            @Deprecated("Deprecated by Android")
+                            override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
+                                publishBattery(gatt, characteristic, characteristic.value ?: byteArrayOf(), status)
+                            }
+                            override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray, status: Int) {
+                                publishBattery(gatt, characteristic, value, status)
                             }
                         }, BluetoothDevice.TRANSPORT_LE)
                         batteryGattConnections.add(gatt)
