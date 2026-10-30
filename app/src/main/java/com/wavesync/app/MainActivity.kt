@@ -1,0 +1,267 @@
+package com.wavesync.app
+
+import android.Manifest
+import android.bluetooth.BluetoothManager
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.media.AudioManager
+import android.media.ToneGenerator
+import android.os.Build
+import android.os.Bundle
+import android.provider.Settings
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+
+private val Ink = Color(0xFF090D16)
+private val Panel = Color(0xFF151D2B)
+private val Panel2 = Color(0xFF1C2738)
+private val Cyan = Color(0xFF62E6D4)
+private val Violet = Color(0xFF9B8CFF)
+private val Muted = Color(0xFF8E9AAF)
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        window.statusBarColor = android.graphics.Color.rgb(9, 13, 22)
+        window.navigationBarColor = android.graphics.Color.rgb(9, 13, 22)
+        setContent { WaveSyncApp(this) }
+    }
+}
+
+@Composable
+private fun WaveSyncApp(activity: MainActivity) {
+    var hasPermission by remember { mutableStateOf(hasBluetoothPermission(activity)) }
+    var deviceName by remember { mutableStateOf("No earbuds selected") }
+    var connected by remember { mutableStateOf(false) }
+    var autoReconnect by remember { mutableStateOf(true) }
+    var eqEnabled by remember { mutableStateOf(true) }
+    var bass by remember { mutableFloatStateOf(0.35f) }
+    var clarity by remember { mutableFloatStateOf(0.55f) }
+    var ambience by remember { mutableFloatStateOf(0.25f) }
+    var message by remember { mutableStateOf("Pair your earbuds to get started") }
+    var showDevices by remember { mutableStateOf(false) }
+    var pairedDevices by remember { mutableStateOf(listOf<String>()) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        hasPermission = hasBluetoothPermission(activity)
+        if (hasPermission) message = "Bluetooth access enabled"
+    }
+
+    fun loadDevices() {
+        if (!hasPermission) {
+            val permissions = if (Build.VERSION.SDK_INT >= 31) arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN) else arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+            permissionLauncher.launch(permissions)
+            return
+        }
+        try {
+            val manager = activity.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+            val adapter = manager.adapter
+            pairedDevices = adapter?.bondedDevices?.map { it.name ?: it.address }?.sorted() ?: emptyList()
+            showDevices = true
+            message = if (pairedDevices.isEmpty()) "No paired devices. Pair earbuds in Android Bluetooth settings." else "Choose a paired audio device"
+        } catch (_: SecurityException) { message = "Bluetooth permission is required" }
+    }
+
+    MaterialTheme(colorScheme = darkColorScheme(primary = Cyan, secondary = Violet, background = Ink, surface = Panel, onBackground = Color.White, onSurface = Color.White)) {
+        androidx.compose.foundation.lazy.LazyColumn(
+            modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF111B2A), Ink, Ink))),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
+        ) {
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Box(Modifier.size(42.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(Cyan, Violet))), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Rounded.GraphicEq, null, tint = Ink, modifier = Modifier.size(25.dp))
+                    }
+                    Spacer(Modifier.width(11.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("WaveSync", fontSize = 23.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text("YOUR AUDIO, IN SYNC", fontSize = 9.sp, color = Muted, letterSpacing = 2.sp)
+                    }
+                    IconButton(onClick = { activity.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }) {
+                        Icon(Icons.Rounded.SettingsBluetooth, "Bluetooth settings", tint = Muted)
+                    }
+                }
+            }
+            item {
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(Brush.linearGradient(listOf(Color(0xFF26364A), Color(0xFF172334), Color(0xFF24213C)))).padding(20.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(color = if (connected) Cyan.copy(alpha = .14f) else Color.White.copy(alpha = .08f), shape = CircleShape) {
+                            Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.size(7.dp).clip(CircleShape).background(if (connected) Cyan else Muted))
+                                Spacer(Modifier.width(7.dp))
+                                Text(if (connected) "SELECTED DEVICE" else "NOT CONNECTED", color = if (connected) Cyan else Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                            }
+                        }
+                        Spacer(Modifier.weight(1f))
+                        Icon(Icons.Rounded.Bluetooth, null, tint = Cyan)
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    EarbudArt(Modifier.fillMaxWidth().height(128.dp))
+                    Spacer(Modifier.height(12.dp))
+                    Text(deviceName, fontSize = 21.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Connect any paired Bluetooth audio device", color = Muted, fontSize = 12.sp)
+                    Spacer(Modifier.height(18.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Button(onClick = { loadDevices() }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Ink), shape = RoundedCornerShape(14.dp)) {
+                            Icon(Icons.Rounded.BluetoothSearching, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(7.dp)); Text("Find device")
+                        }
+                        OutlinedButton(onClick = { activity.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Pair device") }
+                    }
+                }
+            }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    MetricCard("LEFT BUD", "—", "Not exposed", Modifier.weight(1f))
+                    MetricCard("RIGHT BUD", "—", "Not exposed", Modifier.weight(1f))
+                    MetricCard("CASE", "—", "Not exposed", Modifier.weight(1f))
+                }
+            }
+            item {
+                SectionHeader("Quick controls", "MEDIA")
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                    QuickButton(Icons.Rounded.SkipPrevious, "Previous", Modifier.weight(1f)) { sendMediaKey(activity, android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS) }
+                    QuickButton(Icons.Rounded.PlayArrow, "Play / pause", Modifier.weight(1.3f), true) { sendMediaKey(activity, android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) }
+                    QuickButton(Icons.Rounded.SkipNext, "Next", Modifier.weight(1f)) { sendMediaKey(activity, android.view.KeyEvent.KEYCODE_MEDIA_NEXT) }
+                }
+            }
+            item {
+                SectionHeader("Sound studio", "EQUALIZER")
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Panel).padding(18.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) { Text("Personal sound", fontWeight = FontWeight.SemiBold, fontSize = 16.sp); Text("Software audio profile", color = Muted, fontSize = 11.sp) }
+                        Switch(checked = eqEnabled, onCheckedChange = { eqEnabled = it })
+                    }
+                    EqSlider("Bass", bass, { bass = it }, eqEnabled)
+                    EqSlider("Clarity", clarity, { clarity = it }, eqEnabled)
+                    EqSlider("Immersion", ambience, { ambience = it }, eqEnabled)
+                    Text("UI profile controls are ready; system-wide equalizer processing requires a compatible audio-effect session.", color = Muted, fontSize = 10.sp, lineHeight = 15.sp)
+                }
+            }
+            item {
+                SectionHeader("Earbud features", "DEVICE TOOLS")
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    FeatureRow(Icons.Rounded.LocationSearching, "Find my earbuds", "Send a locator tone to the active audio route", "PLAY") {
+                        try { ToneGenerator(AudioManager.STREAM_MUSIC, 85).startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 1800); message = "Locator tone sent to the current audio route" } catch (_: Exception) { message = "Could not play locator tone" }
+                    }
+                    FeatureRow(Icons.Rounded.NoiseControlOff, "Noise cancellation", "Requires earbud manufacturer protocol", "CHECK") { message = "ANC control is not exposed through standard Bluetooth APIs" }
+                    FeatureRow(Icons.Rounded.SportsEsports, "Gaming mode", "Low-latency mode requires firmware support", "CHECK") { message = "Gaming mode is not exposed through standard Bluetooth APIs" }
+                    FeatureRow(Icons.Rounded.TouchApp, "Touch controls", "Standard media buttons; remapping is vendor-specific", "TEST") { sendMediaKey(activity, android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE); message = "Sent standard play/pause media command" }
+                }
+            }
+            item {
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Panel).padding(18.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Automatic reconnect", fontWeight = FontWeight.SemiBold)
+                            Text("Android reconnects previously paired devices when available", color = Muted, fontSize = 10.sp, lineHeight = 14.sp)
+                        }
+                        Switch(checked = autoReconnect, onCheckedChange = { autoReconnect = it })
+                    }
+                }
+            }
+            item {
+                Text(message, color = Cyan, fontSize = 12.sp)
+                Text("Proprietary ANC, touch remapping, earbud battery and gaming controls need compatible vendor protocols. WaveSync will not fake unsupported hardware features.", color = Muted, fontSize = 10.sp, lineHeight = 15.sp)
+            }
+        }
+        if (showDevices) AlertDialog(
+            onDismissRequest = { showDevices = false },
+            title = { Text("Paired Bluetooth devices") },
+            text = { Column { if (pairedDevices.isEmpty()) Text("No paired devices found.") else pairedDevices.forEach { name -> TextButton(onClick = { deviceName = name; connected = false; showDevices = false; message = "Selected $name. Connection is managed by Android Bluetooth settings." }) { Text(name) } } } },
+            confirmButton = { TextButton(onClick = { showDevices = false }) { Text("Close") } },
+            containerColor = Panel
+        )
+    }
+}
+
+private fun hasBluetoothPermission(context: Context): Boolean =
+    Build.VERSION.SDK_INT < 31 || ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+
+private fun sendMediaKey(context: Context, keyCode: Int) {
+    val manager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    manager.dispatchMediaKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, keyCode))
+    manager.dispatchMediaKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, keyCode))
+}
+
+@Composable
+private fun EarbudArt(modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val cx = size.width / 2f
+        val cy = size.height / 2f
+        drawCircle(Cyan.copy(alpha = .14f), size.minDimension * .35f, Offset(cx, cy))
+        val body = Brush.linearGradient(listOf(Color(0xFFF4F8FA), Color(0xFF8FA5B8), Color(0xFFE4EDF2)))
+        fun bud(x: Float, y: Float) {
+            drawRoundRect(body, Offset(x - 22f, y - 35f), androidx.compose.ui.geometry.Size(44f, 68f), androidx.compose.ui.geometry.CornerRadius(22f))
+            drawRoundRect(body, Offset(x - 10f, y + 15f), androidx.compose.ui.geometry.Size(20f, 53f), androidx.compose.ui.geometry.CornerRadius(10f))
+            drawCircle(Color(0xFF536579), 5f, Offset(x, y - 12f))
+            drawCircle(Cyan.copy(alpha = .8f), 2.5f, Offset(x, y - 12f))
+        }
+        bud(cx - 54f, cy - 7f); bud(cx + 54f, cy - 7f)
+        drawLine(Cyan.copy(alpha = .5f), Offset(cx - 110f, cy + 61f), Offset(cx + 110f, cy + 61f), 1.5f, cap = StrokeCap.Round)
+    }
+}
+
+@Composable
+private fun MetricCard(title: String, value: String, subtitle: String, modifier: Modifier = Modifier) {
+    Column(modifier.clip(RoundedCornerShape(18.dp)).background(Panel).padding(12.dp)) {
+        Text(title, color = Muted, fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = .7.sp)
+        Spacer(Modifier.height(8.dp))
+        Text(value, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = if (value == "—") Muted else Cyan)
+        Text(subtitle, color = Muted, fontSize = 9.sp)
+    }
+}
+@Composable
+private fun SectionHeader(title: String, tag: String) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(title, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.weight(1f))
+        Text(tag, color = Violet, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+    }
+}
+@Composable
+private fun QuickButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, modifier: Modifier = Modifier, primary: Boolean = false, onClick: () -> Unit) {
+    Column(modifier.clip(RoundedCornerShape(16.dp)).background(if (primary) Cyan else Panel).padding(vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        IconButton(onClick = onClick) { Icon(icon, null, tint = if (primary) Ink else Color.White, modifier = Modifier.size(25.dp)) }
+        Text(label, color = if (primary) Ink else Muted, fontSize = 9.sp, fontWeight = FontWeight.Medium)
+    }
+}
+@Composable
+private fun EqSlider(label: String, value: Float, onChange: (Float) -> Unit, enabled: Boolean) {
+    Column {
+        Row { Text(label, fontSize = 12.sp); Spacer(Modifier.weight(1f)); Text("${(value * 100).toInt()}", color = Cyan, fontSize = 11.sp) }
+        Slider(value = value, onValueChange = onChange, enabled = enabled, colors = SliderDefaults.colors(thumbColor = Cyan, activeTrackColor = Cyan, inactiveTrackColor = Panel2))
+    }
+}
+@Composable
+private fun FeatureRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, subtitle: String, action: String, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(42.dp).clip(RoundedCornerShape(13.dp)).background(Panel2), contentAlignment = Alignment.Center) { Icon(icon, null, tint = Cyan) }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) { Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold); Text(subtitle, color = Muted, fontSize = 10.sp, lineHeight = 14.sp) }
+        TextButton(onClick = onClick) { Text(action, fontSize = 9.sp, color = Violet, fontWeight = FontWeight.Bold) }
+    }
+}
