@@ -66,9 +66,11 @@ private fun WaveSyncApp(activity: MainActivity) {
     var connected by remember { mutableStateOf(false) }
     var autoReconnect by remember { mutableStateOf(true) }
     var eqEnabled by remember { mutableStateOf(true) }
-    var bass by remember { mutableFloatStateOf(0.35f) }
-    var clarity by remember { mutableFloatStateOf(0.55f) }
-    var ambience by remember { mutableFloatStateOf(0.25f) }
+    val preferences = remember { activity.getSharedPreferences("wavesync_audio", Context.MODE_PRIVATE) }
+    var ambience by remember { mutableFloatStateOf(preferences.getFloat("ambience", 0.25f)) }
+    var bass by remember { mutableFloatStateOf(preferences.getFloat("bass", 0.35f)) }
+    var clarity by remember { mutableFloatStateOf(preferences.getFloat("clarity", 0.55f)) }
+    var selectedPreset by remember { mutableStateOf(preferences.getString("preset", "Custom") ?: "Custom") }
     var message by remember { mutableStateOf("Pair your earbuds to get started") }
     var showDevices by remember { mutableStateOf(false) }
     var pairedDevices by remember { mutableStateOf(listOf<String>()) }
@@ -100,6 +102,15 @@ private fun WaveSyncApp(activity: MainActivity) {
             audioManager.unregisterAudioDeviceCallback(callback)
             audioFx.release()
         }
+    }
+
+    LaunchedEffect(bass, clarity, ambience, selectedPreset) {
+        preferences.edit()
+            .putFloat("bass", bass)
+            .putFloat("clarity", clarity)
+            .putFloat("ambience", ambience)
+            .putString("preset", selectedPreset)
+            .apply()
     }
 
     LaunchedEffect(eqEnabled, bass, clarity, ambience) {
@@ -198,9 +209,31 @@ private fun WaveSyncApp(activity: MainActivity) {
                         Column(Modifier.weight(1f)) { Text("Personal sound", fontWeight = FontWeight.SemiBold, fontSize = 16.sp); Text("Software audio profile", color = Muted, fontSize = 11.sp) }
                         Switch(checked = eqEnabled, onCheckedChange = { eqEnabled = it })
                     }
-                    EqSlider("Bass", bass, { bass = it }, eqEnabled)
-                    EqSlider("Clarity", clarity, { clarity = it }, eqEnabled)
-                    EqSlider("Immersion", ambience, { ambience = it }, eqEnabled)
+                    Text("Sound profiles", color = Muted, fontSize = 11.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                        listOf("Flat", "Bass", "Vocal", "Immersive", "Custom").forEach { preset ->
+                            FilterChip(
+                                selected = selectedPreset == preset,
+                                onClick = {
+                                    selectedPreset = preset
+                                    when (preset) {
+                                        "Flat" -> { bass = .5f; clarity = .5f; ambience = 0f }
+                                        "Bass" -> { bass = .85f; clarity = .48f; ambience = .22f }
+                                        "Vocal" -> { bass = .38f; clarity = .82f; ambience = .12f }
+                                        "Immersive" -> { bass = .62f; clarity = .62f; ambience = .85f }
+                                    }
+                                },
+                                label = { Text(preset, fontSize = 10.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Cyan.copy(alpha = .18f),
+                                    selectedLabelColor = Cyan
+                                )
+                            )
+                        }
+                    }
+                    EqSlider("Bass", bass, { bass = it; selectedPreset = "Custom" }, eqEnabled)
+                    EqSlider("Clarity", clarity, { clarity = it; selectedPreset = "Custom" }, eqEnabled)
+                    EqSlider("Immersion", ambience, { ambience = it; selectedPreset = "Custom" }, eqEnabled)
                     Text(equalizerStatus, color = if (equalizerStatus.contains("active")) Cyan else Muted, fontSize = 10.sp, lineHeight = 15.sp)
                 }
             }
