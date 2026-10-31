@@ -11,6 +11,27 @@ import android.content.pm.ServiceInfo
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.media.MediaRecorder
+import android.media.AudioRecord
+import android.media.AudioFormat
+import android.media.AudioPlaybackCaptureConfiguration
+import android.media.AudioAttributes
+import android.media.AudioManager
+import android.media.AudioDeviceInfo
+import android.media.AudioTrack
+import android.media.AudioRecord.Builder
+import android.media.AudioFormat.Builder
+import android.media.AudioManager
+import android.media.AudioPlaybackCaptureConfiguration
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
+import android.media.AudioTrack
+import android.media.AudioRecord.Builder
+import android.media.AudioFormat.Builder
+import android.media.AudioManager
+import java.io.RandomAccessFile
+import java.io.BufferedOutputStream
 import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.media.projection.MediaProjection
@@ -32,6 +53,10 @@ class ScreenRecordingService : Service() {
     private var display: VirtualDisplay? = null
     private var outputFile: File? = null
     private var stopping = false
+    private var playbackRecord: AudioRecord? = null
+    private var playbackThread: Thread? = null
+    private var playbackFile: File? = null
+    @Volatile private var playbackRunning = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -43,7 +68,7 @@ class ScreenRecordingService : Service() {
                 val code = intent.getIntExtra(EXTRA_RESULT_CODE, 0)
                 val data = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(EXTRA_RESULT_DATA, Intent::class.java) else @Suppress("DEPRECATION") (intent.getParcelableExtra(EXTRA_RESULT_DATA) as? Intent)
                 if (code == 0 || data == null) { stopSelf(); return START_NOT_STICKY }
-                try { beginRecording(code, data, intent.getIntExtra(EXTRA_FPS,60), intent.getStringExtra(EXTRA_QUALITY) ?: "1080p", intent.getBooleanExtra(EXTRA_MIC,false)) }
+                try { beginRecording(code, data, intent.getIntExtra(EXTRA_FPS,60), intent.getStringExtra(EXTRA_QUALITY) ?: "1080p", intent.getBooleanExtra(EXTRA_MIC,false), intent.getBooleanExtra(EXTRA_PLAYBACK,false)) }
                 catch (e: Exception) { getSharedPreferences("clipforge", Context.MODE_PRIVATE).edit().putString("last_error", e.message ?: "Recording could not start").putBoolean("recording_active",false).apply(); stopRecording() }
             }
         }
@@ -67,7 +92,7 @@ class ScreenRecordingService : Service() {
         else startForeground(NOTIFICATION_ID,notification)
     }
 
-    private fun beginRecording(code:Int,data:Intent,fps:Int,quality:String,microphone:Boolean) {
+    private fun beginRecording(code:Int,data:Intent,fps:Int,quality:String,microphone:Boolean,playbackAudio:Boolean) {
         stopping = false
         val manager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         projection = manager.getMediaProjection(code,data)
@@ -103,7 +128,90 @@ class ScreenRecordingService : Service() {
         val surface: Surface = media.surface
         display = projection!!.createVirtualDisplay("ClipForgeCapture",width,height,metrics.densityDpi,DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,surface,null,null)
         media.start()
+        if (playbackAudio) {
+            if (Build.VERSION.SDK_INT >= 29) startPlaybackCapture(projection!!, outputFile!!)
+            else getSharedPreferences("clipforge", Context.MODE_PRIVATE).edit().putString("last_error", "App audio capture requires Android 10 or newer").apply()
+        }
         getSharedPreferences("clipforge",Context.MODE_PRIVATE).edit().putString("last_recording",outputFile!!.absolutePath).putString("last_error","").putBoolean("recording_active",true).apply()
+    }
+
+
+    @androidx.annotation.RequiresApi(29)
+    private fun startPlaybackCapture(mediaProjection: MediaProjection, videoFile: File) {
+        val config = AudioPlaybackCaptureConfiguration.Builder(mediaProjection)
+            .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
+            .addMatchingUsage(AudioAttributes.USAGE_GAME)
+            .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
+            .build()
+        val format = AudioFormat.Builder()
+            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+            .setSampleRate(44100)
+            .setChannelMask(AudioFormat.CHANNEL_IN_STEREO)
+            .build()
+        val minimum = AudioRecord.getMinBufferSize(44100, AudioFormat.CHANNEL_IN_STEREO, AudioFormat.ENCODING_PCM_16BIT)
+        check(minimum > 0) { "Playback audio capture is not supported on this device" }
+        val audio = AudioRecord.Builder()
+            .setAudioFormat(format)
+            .setBufferSizeInBytes(maxOf(minimum * 2, 16384))
+            .setAudioPlaybackCaptureConfig(config)
+            .build()
+        check(audio.state == AudioRecord.STATE_INITIALIZED) { "Could not initialize app audio capture" }
+        playbackFile = File(videoFile.parentFile, videoFile.nameWithoutExtension + "_audio.wav")
+        playbackRecord = audio
+        playbackRunning = true
+        audio.startRecording()
+        playbackThread = Thread {
+            val target = playbackFile ?: return@Thread
+            var dataBytes = 0L
+            try {
+                RandomAccessFile(target, "rw").use { wav ->
+                    wav.setLength(0)
+                    wav.write(ByteArray(44))
+                    val buffer = ByteArray(16384)
+                    while (playbackRunning) {
+                        val count = audio.read(buffer, 0, buffer.size, AudioRecord.READ_BLOCKING)
+                        if (count > 0) {
+                            wav.write(buffer, 0, count)
+                            dataBytes += count
+                        } else if (count < 0) break
+                    }
+                    wav.seek(0)
+                    wav.writeBytes("RIFF")
+                    wav.writeIntLE((36L + dataBytes).coerceAtMost(0xffffffffL).toInt())
+                    wav.writeBytes("WAVEfmt ")
+                    wav.writeIntLE(16)
+                    wav.writeShortLE(1)
+                    wav.writeShortLE(2)
+                    wav.writeIntLE(44100)
+                    wav.writeIntLE(44100 * 4)
+                    wav.writeShortLE(4)
+                    wav.writeShortLE(16)
+                    wav.writeBytes("data")
+                    wav.writeIntLE(dataBytes.coerceAtMost(0xffffffffL).toInt())
+                }
+                if (dataBytes == 0L) target.delete()
+            } catch (e: Exception) {
+                getSharedPreferences("clipforge", Context.MODE_PRIVATE).edit()
+                    .putString("last_error", "App audio capture failed: ${e.message ?: "unsupported source"}").apply()
+                target.delete()
+            }
+        }.apply { name = "ClipForgePlaybackAudio"; start() }
+    }
+
+    private fun RandomAccessFile.writeIntLE(value: Int) {
+        write(value and 0xff); write((value ushr 8) and 0xff); write((value ushr 16) and 0xff); write((value ushr 24) and 0xff)
+    }
+    private fun RandomAccessFile.writeShortLE(value: Int) {
+        write(value and 0xff); write((value ushr 8) and 0xff)
+    }
+
+    private fun stopPlaybackCapture() {
+        playbackRunning = false
+        try { playbackRecord?.stop() } catch (_: Exception) {}
+        try { playbackThread?.join(2500) } catch (_: InterruptedException) { Thread.currentThread().interrupt() }
+        try { playbackRecord?.release() } catch (_: Exception) {}
+        playbackRecord = null
+        playbackThread = null
     }
 
     private fun chooseSupportedCapture(requestedWidth: Int, requestedHeight: Int, requestedFps: Int): Triple<Int, Int, Int> {
@@ -134,6 +242,7 @@ class ScreenRecordingService : Service() {
     private fun stopRecording() {
         if (stopping) return
         stopping = true
+        stopPlaybackCapture()
         try { recorder?.stop() } catch (_:Exception) {}
         try { display?.release() } catch (_:Exception) {}
         try { recorder?.reset(); recorder?.release() } catch (_:Exception) {}
@@ -158,6 +267,7 @@ class ScreenRecordingService : Service() {
         const val EXTRA_FPS="fps"
         const val EXTRA_QUALITY="quality"
         const val EXTRA_MIC="microphone"
+        const val EXTRA_PLAYBACK="playback_audio"
         private const val NOTIFICATION_ID=9021
     }
 }
