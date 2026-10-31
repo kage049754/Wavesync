@@ -205,12 +205,12 @@ private fun ClipForgeApp(activity: MainActivity) {
                 }
             }
             item {
-                SectionTitle("Clip editor", "POST-PRODUCTION")
+                SectionTitle("Editor roadmap", "IN DEVELOPMENT")
                 Column(Modifier.fillMaxWidth().background(Card, RoundedCornerShape(20.dp)).padding(16.dp), verticalArrangement=Arrangement.spacedBy(10.dp)) {
-                    EditorFeature(Icons.Rounded.ContentCut,"Trim and split","Cut unwanted sections and create short clips")
-                    EditorFeature(Icons.Rounded.TextFields,"Subtitle styling","Move captions; change font, size, color, outline and animation")
-                    EditorFeature(Icons.Rounded.Movie,"Outro and overlays","Add an ending card, image, text or music")
-                    EditorFeature(Icons.Rounded.Subtitles,"Subtitle correction","Edit transcript text and timing before export")
+                    EditorFeature(Icons.Rounded.ContentCut,"Trim and split","Planned: cut unwanted sections and create short clips")
+                    EditorFeature(Icons.Rounded.TextFields,"Subtitle styling","Planned: position, font, size, color, outline and animation")
+                    EditorFeature(Icons.Rounded.Movie,"Outro and overlays","Planned: ending cards, images, text and music")
+                    EditorFeature(Icons.Rounded.Subtitles,"Subtitle correction","Available: import, edit, validate and export SRT files")
                 }
             }
             item {
