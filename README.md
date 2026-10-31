@@ -1,13 +1,35 @@
-# WaveSync
+# ClipForge
 
-Universal-minded Bluetooth earbuds companion for Android.
+Android screen recorder and short-form clip editor foundation, replacing the former WaveSync earbuds-controller concept.
 
-WaveSync provides a premium dark device dashboard, system media controls, software equalizer, battery reporting when Android exposes it, reconnect assistance, and capability-aware controls for vendor-specific features.
+## Product direction
 
-## Compatibility notes
+ClipForge is designed for recording streams and gameplay, generating English subtitles, and turning recordings into edited clips.
 
-Bluetooth audio playback and media buttons use standard Android APIs. Earbud battery reporting, ANC/transparency, gaming modes, touch remapping, firmware updates, and direct earbud locating depend on the earbud firmware, Bluetooth profile, vendor protocol, and Android version. WaveSync does not claim to enable hardware features that a device does not expose.
+### Planned workflow
+1. Record the screen at 720p/1080p and 30/60 FPS when the device supports the selected encoder configuration.
+2. Capture microphone audio optionally. Internal playback audio is a separate capability and may be blocked by the source app.
+3. Generate live English captions while recording.
+4. Run a post-recording transcription correction pass for better words and timestamps.
+5. Edit subtitle text, timing, font, size, color, outline, position and animation.
+6. Trim/split video, add outro cards and overlays, and export MP4 plus SRT.
 
-## Build
+## Current implementation
+- Android MediaProjection consent flow.
+- Foreground media-projection recording service.
+- H.264 MP4 screen capture with selectable 720p/1080p and 30/60 FPS targets.
+- Optional microphone recording.
+- Recording notification with Stop action.
+- Files saved under the app-specific Movies/ClipForge directory.
+- Initial UI for the transcription and editor workflow.
 
-Pushes to `main` and manual workflow dispatch build a debug APK with GitHub Actions. Download the `WaveSync-debug-apk` artifact from the workflow run.
+## Roadmap
+- [ ] Internal playback audio capture using Android AudioPlaybackCapture where permitted.
+- [ ] Live English speech recognition with timestamped caption segments.
+- [ ] Offline post-recording transcription and correction pass.
+- [ ] Subtitle editor with SRT import/export and styling.
+- [ ] Timeline editor: trim, split, overlays, outro and audio mix.
+- [ ] Export presets and device capability detection.
+
+## Compatibility and privacy
+MediaProjection requires explicit Android system consent for each capture session. Some apps prevent playback-audio capture. Actual frame rate and resolution depend on device display and hardware encoder support. The initial recorder stores videos in app-specific external storage and does not upload recordings.
