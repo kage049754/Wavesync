@@ -67,6 +67,9 @@ class ScreenRecordingService : Service() {
     private fun beginRecording(code:Int,data:Intent,fps:Int,quality:String,microphone:Boolean) {
         val manager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         projection = manager.getMediaProjection(code,data)
+        projection?.registerCallback(object:MediaProjection.Callback() {
+            override fun onStop() { stopRecording() }
+        },null)
         val metrics = DisplayMetrics()
         @Suppress("DEPRECATION")
         (getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay.getRealMetrics(metrics)
