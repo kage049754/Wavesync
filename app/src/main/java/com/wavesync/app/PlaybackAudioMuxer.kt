@@ -15,7 +15,7 @@ import java.nio.ByteOrder
  * the completed muxed file has been validated and atomically staged.
  */
 object PlaybackAudioMuxer {
-    fun mux(video: File, wav: File): Result<Unit> = runCatching {
+    fun mux(video: File, wav: File, audioOffsetUs: Long = 0L): Result<Unit> = runCatching {
         require(video.isFile && video.length() > 0L) { "Original video is missing" }
         require(wav.isFile && wav.length() > 44L) { "Captured playback audio is empty" }
         val encodedAudio = File(video.parentFile, video.nameWithoutExtension + "_audio_encoded.mp4")
@@ -23,7 +23,7 @@ object PlaybackAudioMuxer {
         val backup = File(video.parentFile, video.nameWithoutExtension + "_original_backup.mp4")
         try {
             encodeWavToAac(wav, encodedAudio)
-            combineTracks(video, encodedAudio, merged)
+            combineTracks(video, encodedAudio, merged, audioOffsetUs)
             require(merged.isFile && merged.length() > 0L) { "Muxed video output is empty" }
             MediaExtractor().useExtractor { extractor ->
                 extractor.setDataSource(merged.absolutePath)
@@ -145,7 +145,7 @@ object PlaybackAudioMuxer {
         require(output.isFile && output.length() > 0L) { "AAC audio encoding failed" }
     }
 
-    private fun combineTracks(video: File, audio: File, output: File) {
+    private fun combineTracks(video: File, audio: File, output: File, audioOffsetUs: Long) {
         val videoExtractor = MediaExtractor()
         val audioExtractor = MediaExtractor()
         var muxer: MediaMuxer? = null
@@ -181,7 +181,7 @@ object PlaybackAudioMuxer {
             require(audioTracks > 0) { "Encoded playback audio has no audio track" }
             muxer.start()
             started = true
-            copyInterleaved(videoExtractor, videoMap, audioExtractor, audioMap, muxer)
+            copyInterleaved(videoExtractor, videoMap, audioExtractor, audioMap, muxer, audioOffsetUs)
         } finally {
             try { if (started) muxer?.stop() } catch (_: Exception) {}
             muxer?.release()
@@ -195,7 +195,8 @@ object PlaybackAudioMuxer {
         videoMap: IntArray,
         audioExtractor: MediaExtractor,
         audioMap: IntArray,
-        muxer: MediaMuxer
+        muxer: MediaMuxer,
+        audioOffsetUs: Long
     ) {
         for (i in videoMap.indices) if (videoMap[i] >= 0) videoExtractor.selectTrack(i)
         for (i in audioMap.indices) if (audioMap[i] >= 0) audioExtractor.selectTrack(i)
@@ -206,7 +207,7 @@ object PlaybackAudioMuxer {
             val audioTrack = audioExtractor.sampleTrackIndex
             if (videoTrack < 0 && audioTrack < 0) break
             val takeVideo = audioTrack < 0 || (videoTrack >= 0 &&
-                videoExtractor.sampleTime <= audioExtractor.sampleTime)
+                videoExtractor.sampleTime <= audioExtractor.sampleTime + audioOffsetUs)
             val extractor = if (takeVideo) videoExtractor else audioExtractor
             val sourceTrack = if (takeVideo) videoTrack else audioTrack
             val mapping = if (takeVideo) videoMap else audioMap
@@ -216,7 +217,8 @@ object PlaybackAudioMuxer {
                 extractor.advance()
                 continue
             }
-            info.set(0, size, extractor.sampleTime.coerceAtLeast(0L), extractor.sampleFlags)
+            val sampleTime = extractor.sampleTime + if (takeVideo) 0L else audioOffsetUs
+            info.set(0, size, sampleTime.coerceAtLeast(0L), extractor.sampleFlags)
             muxer.writeSampleData(mapping[sourceTrack], buffer, info)
             extractor.advance()
         }
