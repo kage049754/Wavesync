@@ -2,6 +2,8 @@ package com.wavesync.app
 
 import android.content.Context
 import android.content.Intent
+import android.content.ContentValues
+import android.provider.MediaStore
 import androidx.core.content.FileProvider
 import android.media.projection.MediaProjectionManager
 import android.os.Build
@@ -179,6 +181,25 @@ private fun ClipForgeApp(activity: MainActivity) {
                                         activity.startActivity(view)
                                     }.onFailure { status = "No video player found or file could not be opened" }
                                 }) { Icon(Icons.Rounded.PlayArrow, contentDescription="Play recording", tint=Cyan) }
+                                IconButton(onClick = {
+                                    runCatching {
+                                        val values = ContentValues().apply {
+                                            put(MediaStore.Video.Media.DISPLAY_NAME, file.name)
+                                            put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+                                            if (Build.VERSION.SDK_INT >= 29) put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/ClipForge")
+                                        }
+                                        val collection = if (Build.VERSION.SDK_INT >= 29) MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY) else MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                                        val uri = activity.contentResolver.insert(collection, values) ?: error("Gallery entry could not be created")
+                                        try {
+                                            activity.contentResolver.openOutputStream(uri)?.use { output -> file.inputStream().use { input -> input.copyTo(output) } }
+                                                ?: error("Gallery output stream unavailable")
+                                            status = "Saved " + file.name + " to Movies/ClipForge"
+                                        } catch (e: Exception) {
+                                            activity.contentResolver.delete(uri, null, null)
+                                            throw e
+                                        }
+                                    }.onFailure { status = "Gallery export failed: " + (it.message ?: "unknown error") }
+                                }) { Icon(Icons.Rounded.SaveAlt, contentDescription="Save to gallery", tint=Purple) }
                             }
                         }
                     }
