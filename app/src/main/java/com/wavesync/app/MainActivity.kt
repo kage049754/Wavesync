@@ -128,6 +128,10 @@ private fun ClipForgeApp(activity: MainActivity) {
         microphoneEnabled = granted
         status = if (granted) "Microphone audio enabled for the next recording" else "Microphone permission was denied"
     }
+    val playbackAudioPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        playbackAudioEnabled = granted
+        status = if (granted) "App playback audio enabled for the next recording" else "Audio permission was denied"
+    }
     val subtitleImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         val video = subtitleImportTarget
         if (uri != null && video != null) {
@@ -221,16 +225,18 @@ private fun ClipForgeApp(activity: MainActivity) {
                     Row(verticalAlignment=Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("App playback audio", fontSize=13.sp, fontWeight=FontWeight.SemiBold)
-                            Text("Android 10+. Saves a separate WAV audio file beside the MP4; some apps block capture.", color=Muted, fontSize=10.sp)
+                            Text("Android 10+. Captured audio is added to the MP4 after recording; some apps block capture.", color=Muted, fontSize=10.sp)
                         }
                         Switch(checked=playbackAudioEnabled, onCheckedChange={ enabled ->
                             if (enabled && Build.VERSION.SDK_INT < 29) {
                                 status = "App audio capture requires Android 10 or newer"
                             } else if (enabled && activity.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                                microphonePermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
-                                playbackAudioEnabled = true
+                                playbackAudioPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
                             } else playbackAudioEnabled = enabled
                         })
+                    }
+                    if (microphoneEnabled && playbackAudioEnabled) {
+                        Text("Microphone and captured app audio are saved as separate MP4 audio tracks, not mixed together.", color=Muted, fontSize=10.sp, lineHeight=14.sp)
                     }
                 }
             }
