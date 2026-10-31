@@ -5,6 +5,8 @@ import android.content.Intent
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import java.io.File
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -46,7 +48,13 @@ private fun ClipForgeApp(activity: MainActivity) {
     var quality by remember { mutableStateOf("1080p") }
     var isRecording by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("Ready to capture your screen") }
-    val prefs = remember { activity.getSharedPreferences("clipforge", Context.MODE_PRIVATE) }
+    var recordings by remember { mutableStateOf(emptyList<File>()) }
+    val refreshRecordings = {
+        val folder = File(activity.getExternalFilesDir(Environment.DIRECTORY_MOVIES), "ClipForge")
+        recordings = folder.listFiles { file -> file.isFile && file.extension.equals("mp4", true) }
+            ?.sortedByDescending { it.lastModified() } ?: emptyList()
+    }
+    LaunchedEffect(Unit) { refreshRecordings() }
     val projectionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK && result.data != null) {
             val intent = Intent(activity, ScreenRecordingService::class.java).apply {
@@ -147,9 +155,26 @@ private fun ClipForgeApp(activity: MainActivity) {
             }
             item {
                 SectionTitle("Saved recordings", "LIBRARY")
-                Column(Modifier.fillMaxWidth().background(Card, RoundedCornerShape(20.dp)).padding(16.dp)) {
-                    Text("Recordings are saved in the app's ClipForge Movies folder.", color=Muted, fontSize=11.sp)
-                    Text("Editor and transcription processing are staged for subsequent implementation.", color=Muted, fontSize=11.sp)
+                Column(Modifier.fillMaxWidth().background(Card, RoundedCornerShape(20.dp)).padding(16.dp), verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment=Alignment.CenterVertically) {
+                        Text(recordings.size.toString() + " video file(s)", color=Muted, fontSize=11.sp, modifier=Modifier.weight(1f))
+                        TextButton(onClick={ refreshRecordings() }) { Icon(Icons.Rounded.Refresh, null); Spacer(Modifier.width(4.dp)); Text("Refresh") }
+                    }
+                    if (recordings.isEmpty()) {
+                        Text("No recordings yet. Start a screen capture to create your first MP4.", color=Muted, fontSize=11.sp)
+                    } else {
+                        recordings.forEach { file ->
+                            Row(verticalAlignment=Alignment.CenterVertically, modifier=Modifier.fillMaxWidth()) {
+                                Icon(Icons.Rounded.VideoFile, tint=Cyan, contentDescription=null, modifier=Modifier.size(25.dp))
+                                Spacer(Modifier.width(10.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(file.name, fontWeight=FontWeight.SemiBold, fontSize=12.sp)
+                                    Text(android.text.format.Formatter.formatShortFileSize(activity, file.length()) + " • " + java.text.SimpleDateFormat("MMM d, yyyy  h:mm a", java.util.Locale.getDefault()).format(java.util.Date(file.lastModified())), color=Muted, fontSize=10.sp)
+                                }
+                            }
+                        }
+                    }
+                    Text("Stored privately in ClipForge's app-specific Movies folder. Transcription and editing are not implemented yet.", color=Muted, fontSize=10.sp, lineHeight=15.sp)
                 }
             }
             item {
