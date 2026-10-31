@@ -52,6 +52,7 @@ private fun ClipForgeApp(activity: MainActivity) {
     var fps by remember { mutableIntStateOf(60) }
     var quality by remember { mutableStateOf("1080p") }
     var microphoneEnabled by remember { mutableStateOf(false) }
+    var playbackAudioEnabled by remember { mutableStateOf(false) }
     var isRecording by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("Ready to capture your screen") }
     var recordings by remember { mutableStateOf(emptyList<File>()) }
@@ -92,6 +93,7 @@ private fun ClipForgeApp(activity: MainActivity) {
                 putExtra(ScreenRecordingService.EXTRA_FPS, fps)
                 putExtra(ScreenRecordingService.EXTRA_QUALITY, quality)
                 putExtra(ScreenRecordingService.EXTRA_MIC, microphoneEnabled)
+                putExtra(ScreenRecordingService.EXTRA_PLAYBACK, playbackAudioEnabled)
             }
             if (Build.VERSION.SDK_INT >= 26) activity.startForegroundService(intent) else activity.startService(intent)
             isRecording = true
@@ -189,11 +191,25 @@ private fun ClipForgeApp(activity: MainActivity) {
                     Row(verticalAlignment=Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("Microphone audio", fontSize=13.sp, fontWeight=FontWeight.SemiBold)
-                            Text("Record nearby voice; this does not capture app playback audio.", color=Muted, fontSize=10.sp)
+                            Text("Record nearby voice from the microphone.", color=Muted, fontSize=10.sp)
                         }
                         Switch(checked=microphoneEnabled, onCheckedChange={ enabled ->
                             if (enabled) microphonePermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
                             else microphoneEnabled=false
+                        })
+                    }
+                    Row(verticalAlignment=Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("App playback audio", fontSize=13.sp, fontWeight=FontWeight.SemiBold)
+                            Text("Android 10+. Saves a separate WAV audio file beside the MP4; some apps block capture.", color=Muted, fontSize=10.sp)
+                        }
+                        Switch(checked=playbackAudioEnabled, onCheckedChange={ enabled ->
+                            if (enabled && Build.VERSION.SDK_INT < 29) {
+                                status = "App audio capture requires Android 10 or newer"
+                            } else if (enabled && activity.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                microphonePermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                                playbackAudioEnabled = true
+                            } else playbackAudioEnabled = enabled
                         })
                     }
                 }
