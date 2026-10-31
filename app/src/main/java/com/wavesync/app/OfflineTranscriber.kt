@@ -158,7 +158,7 @@ object OfflineTranscriber {
                 val seconds = inputFrames / 44100L
                 if (seconds - lastProgress >= 5) {
                     lastProgress = seconds
-                    main.post { progress("Transcribing captured app audio: \${seconds}s processed") }
+                    main.post { progress("Transcribing captured app audio: ${seconds}s processed") }
                 }
             }
             val tail = pending.toByteArray()
