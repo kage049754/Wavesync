@@ -22,6 +22,8 @@ import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Environment
 import android.os.IBinder
+import android.os.Handler
+import android.os.Looper
 import android.util.DisplayMetrics
 import android.view.Surface
 import android.view.WindowManager
@@ -40,6 +42,7 @@ class ScreenRecordingService : Service() {
     private var playbackRecord: AudioRecord? = null
     private var playbackThread: Thread? = null
     private var playbackFile: File? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
     @Volatile private var playbackRunning = false
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -233,8 +236,39 @@ class ScreenRecordingService : Service() {
         try { projection?.stop() } catch (_:Exception) {}
         recorder=null; display=null; projection=null
         val saved=outputFile?.takeIf { it.exists() && it.length()>0L }
-        getSharedPreferences("clipforge",Context.MODE_PRIVATE).edit().putString("last_recording",saved?.absolutePath ?: "").putBoolean("recording_active",false).apply()
+        val wav = playbackFile?.takeIf { it.exists() && it.length()>44L }
         outputFile=null
+        getSharedPreferences("clipforge",Context.MODE_PRIVATE).edit()
+            .putString("last_recording",saved?.absolutePath ?: "")
+            .putBoolean("recording_active",false)
+            .putString("last_mux_status", if (saved != null && wav != null) "Finishing MP4 audio..." else "")
+            .apply()
+        if (saved != null && wav != null) {
+            val notification = Notification.Builder(this, "clipforge_recording")
+                .setSmallIcon(android.R.drawable.presence_video_online)
+                .setContentTitle("ClipForge is finishing your video")
+                .setContentText("Adding captured app audio to the MP4")
+                .setOngoing(true)
+                .build()
+            try { (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIFICATION_ID, notification) } catch (_: Exception) {}
+            Thread {
+                val result = PlaybackAudioMuxer.mux(saved, wav)
+                val prefs = getSharedPreferences("clipforge", Context.MODE_PRIVATE).edit()
+                if (result.isSuccess) {
+                    prefs.putString("last_mux_status", "Captured app audio was added to the MP4")
+                } else {
+                    prefs.putString("last_mux_status", "Audio mux failed; original MP4 and WAV were preserved")
+                        .putString("last_error", "Audio mux failed: ${result.exceptionOrNull()?.message ?: "unknown error"}. Original MP4 was preserved.")
+                }
+                prefs.apply()
+                mainHandler.post { finishStopping() }
+            }.apply { name = "ClipForgeAudioMux"; start() }
+        } else {
+            finishStopping()
+        }
+    }
+
+    private fun finishStopping() {
         try { (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIFICATION_ID) } catch (_:Exception) {}
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopping = false
