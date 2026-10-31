@@ -11,6 +11,8 @@ import android.content.pm.ServiceInfo
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.media.MediaRecorder
+import android.media.MediaCodecList
+import android.media.MediaFormat
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Build
@@ -75,8 +77,12 @@ class ScreenRecordingService : Service() {
         (getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay.getRealMetrics(metrics)
         val maxDimension = if (quality == "720p") 720 else 1080
         val scale = maxDimension.toFloat() / maxOf(metrics.widthPixels,metrics.heightPixels).toFloat()
-        val width = ((metrics.widthPixels * scale).toInt() / 2) * 2
-        val height = ((metrics.heightPixels * scale).toInt() / 2) * 2
+        val requestedWidth = ((metrics.widthPixels * scale).toInt() / 2) * 2
+        val requestedHeight = ((metrics.heightPixels * scale).toInt() / 2) * 2
+        val supported = chooseSupportedCapture(requestedWidth, requestedHeight, fps)
+        val width = supported.first
+        val height = supported.second
+        val actualFps = supported.third
         val dir = File(getExternalFilesDir(Environment.DIRECTORY_MOVIES),"ClipForge").apply { mkdirs() }
         val stamp = SimpleDateFormat("yyyyMMdd_HHmmss",Locale.US).format(Date())
         outputFile = File(dir,"ClipForge_$stamp.mp4")
@@ -88,17 +94,39 @@ class ScreenRecordingService : Service() {
         media.setOutputFile(outputFile!!.absolutePath)
         media.setVideoEncoder(MediaRecorder.VideoEncoder.H264)
         media.setVideoSize(width.coerceAtLeast(2),height.coerceAtLeast(2))
-        media.setVideoFrameRate(fps.coerceIn(24,60))
+        media.setVideoFrameRate(actualFps)
         media.setVideoEncodingBitRate(if (quality == "720p") 6_000_000 else 12_000_000)
         if (microphone) { media.setAudioEncoder(MediaRecorder.AudioEncoder.AAC); media.setAudioEncodingBitRate(128000); media.setAudioSamplingRate(44100) }
         media.prepare()
         val surface: Surface = media.surface
         display = projection!!.createVirtualDisplay("ClipForgeCapture",width,height,metrics.densityDpi,DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,surface,null,null)
         media.start()
-        projection?.registerCallback(object:MediaProjection.Callback() {
-            override fun onStop() { stopRecording() }
-        },null)
         getSharedPreferences("clipforge",Context.MODE_PRIVATE).edit().putString("last_recording",outputFile!!.absolutePath).putString("last_error","").apply()
+    }
+
+    private fun chooseSupportedCapture(requestedWidth: Int, requestedHeight: Int, requestedFps: Int): Triple<Int, Int, Int> {
+        val encoders = MediaCodecList(MediaCodecList.ALL_CODECS).codecInfos.filter { info ->
+            info.isEncoder && info.supportedTypes.any { it.equals(MediaFormat.MIMETYPE_VIDEO_AVC, true) }
+        }
+        val candidates = listOf(
+            requestedWidth to requestedHeight,
+            ((requestedWidth * 0.85f).toInt() / 2 * 2) to ((requestedHeight * 0.85f).toInt() / 2 * 2),
+            ((requestedWidth * 0.70f).toInt() / 2 * 2) to ((requestedHeight * 0.70f).toInt() / 2 * 2),
+            ((requestedWidth * 0.50f).toInt() / 2 * 2) to ((requestedHeight * 0.50f).toInt() / 2 * 2)
+        ).distinct()
+        val rates = listOf(requestedFps.coerceIn(24, 60), 30, 24).distinct()
+        for ((width, height) in candidates) {
+            for (rate in rates) {
+                val supported = encoders.any { info ->
+                    runCatching {
+                        info.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC)
+                            .videoCapabilities.areSizeAndRateSupported(width, height, rate.toDouble())
+                    }.getOrDefault(false)
+                }
+                if (supported) return Triple(width, height, rate)
+            }
+        }
+        throw IllegalStateException("No compatible H.264 encoder profile found for this display")
     }
 
     private fun stopRecording() {
