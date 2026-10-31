@@ -85,9 +85,9 @@ object OfflineTranscriber {
                 val model = Model(modelDirectory(context).absolutePath)
                 try {
                     val words = mutableListOf<Word>()
+                    val playbackWav = File(video.parentFile, video.nameWithoutExtension + "_audio.wav")
                     Recognizer(model, 16000.0f).use { recognizer ->
                         recognizer.setWords(true)
-                        val playbackWav = File(video.parentFile, video.nameWithoutExtension + "_audio.wav")
                         if (playbackWav.exists() && playbackWav.length() > 44L) {
                             decodeWav(playbackWav, recognizer, words, progress)
                         } else {
