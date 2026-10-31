@@ -155,10 +155,10 @@ class ScreenRecordingService : Service() {
         check(audio.state == AudioRecord.STATE_INITIALIZED) { "Could not initialize app audio capture" }
         playbackFile = File(videoFile.parentFile, videoFile.nameWithoutExtension + "_audio.wav")
         playbackRecord = audio
-        playbackAudioOffsetUs = ((SystemClock.elapsedRealtimeNanos() - recordingStartedAtNs) / 1000L).coerceAtLeast(0L)
-        File(videoFile.parentFile, videoFile.nameWithoutExtension + "_audio.offset").writeText(playbackAudioOffsetUs.toString())
         playbackRunning = true
         audio.startRecording()
+        playbackAudioOffsetUs = ((SystemClock.elapsedRealtimeNanos() - recordingStartedAtNs) / 1000L).coerceAtLeast(0L)
+        File(videoFile.parentFile, videoFile.nameWithoutExtension + "_audio.offset").writeText(playbackAudioOffsetUs.toString())
         playbackThread = Thread {
             val target = playbackFile ?: return@Thread
             var dataBytes = 0L
