@@ -52,6 +52,9 @@ private fun ClipForgeApp(activity: MainActivity) {
     var isRecording by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("Ready to capture your screen") }
     var recordings by remember { mutableStateOf(emptyList<File>()) }
+    var modelReady by remember { mutableStateOf(OfflineTranscriber.isModelInstalled(activity)) }
+    var asrBusy by remember { mutableStateOf(false) }
+    var asrStatus by remember { mutableStateOf(if (modelReady) "Offline English model is ready" else "Download the 40 MB English model once to enable offline transcription") }
     val refreshRecordings = {
         val folder = File(activity.getExternalFilesDir(Environment.DIRECTORY_MOVIES), "ClipForge")
         recordings = folder.listFiles { file -> file.isFile && file.extension.equals("mp4", true) }
@@ -149,10 +152,22 @@ private fun ClipForgeApp(activity: MainActivity) {
                     Row(verticalAlignment=Alignment.CenterVertically) {
                         Icon(Icons.Rounded.ClosedCaption, tint=Cyan, contentDescription=null, modifier=Modifier.size(26.dp))
                         Spacer(Modifier.width(10.dp))
-                        Text("Live English captions + correction pass", fontWeight=FontWeight.SemiBold)
+                        Text("Offline English transcription", fontWeight=FontWeight.SemiBold)
                     }
-                    Text("Planned pipeline: transcribe while recording, then reprocess the saved audio for better wording and timestamps. The current recorder foundation saves the video; transcription engine integration is the next build stage.", color=Muted, fontSize=11.sp, lineHeight=17.sp)
-                    Text("Subtitles will remain editable and exportable as SRT.", color=Cyan, fontSize=11.sp, fontWeight=FontWeight.SemiBold)
+                    Text("Download the small Vosk English model once. After installation, saved recordings can be transcribed on-device without sending audio to a server. The first version exports timestamped SRT subtitles.", color=Muted, fontSize=11.sp, lineHeight=17.sp)
+                    Row(verticalAlignment=Alignment.CenterVertically, horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                        Button(enabled=!asrBusy && !modelReady, onClick={
+                            asrBusy=true
+                            asrStatus="Connecting to the model download..."
+                            OfflineTranscriber.downloadModel(activity,{ message -> asrStatus=message }) { result ->
+                                asrBusy=false
+                                result.onSuccess { modelReady=true; asrStatus="English model installed. Transcription is now offline." }
+                                    .onFailure { asrStatus="Model download failed: " + (it.message ?: "unknown error") }
+                            }
+                        }) { Text(if (modelReady) "Model installed" else if (asrBusy) "Please wait..." else "Download English model") }
+                        if (modelReady) Icon(Icons.Rounded.CheckCircle, contentDescription="Model installed", tint=Cyan)
+                    }
+                    Text(asrStatus, color=if (modelReady) Cyan else Muted, fontSize=10.sp, lineHeight=15.sp)
                 }
             }
             item {
@@ -189,6 +204,15 @@ private fun ClipForgeApp(activity: MainActivity) {
                                         activity.startActivity(view)
                                     }.onFailure { status = "No video player found or file could not be opened" }
                                 }) { Icon(Icons.Rounded.PlayArrow, contentDescription="Play recording", tint=Cyan) }
+                                TextButton(enabled=modelReady && !asrBusy, onClick={
+                                    asrBusy=true
+                                    asrStatus="Preparing audio decoder..."
+                                    OfflineTranscriber.transcribe(activity,file,{ message -> asrStatus=message }) { result ->
+                                        asrBusy=false
+                                        result.onSuccess { subtitle -> asrStatus="SRT created: " + subtitle.name }
+                                            .onFailure { asrStatus="Transcription failed: " + (it.message ?: "unknown error") }
+                                    }
+                                }) { Text("SRT", color=if(modelReady && !asrBusy) Cyan else Muted, fontSize=11.sp) }
                                 IconButton(onClick = {
                                     runCatching {
                                         val values = ContentValues().apply {
@@ -211,7 +235,7 @@ private fun ClipForgeApp(activity: MainActivity) {
                             }
                         }
                     }
-                    Text("Stored privately in ClipForge's app-specific Movies folder. Transcription and editing are not implemented yet.", color=Muted, fontSize=10.sp, lineHeight=15.sp)
+                    Text("Original MP4s stay in app storage. Use SRT beside a recording to create an offline timestamped subtitle file; internal playback audio capture is not implemented yet.", color=Muted, fontSize=10.sp, lineHeight=15.sp)
                 }
             }
             item {
