@@ -8,7 +8,7 @@ ClipForge is designed for recording streams and gameplay, generating English sub
 
 ### Planned workflow
 1. Record the screen at 720p/1080p and 30/60 FPS when the device supports the selected encoder configuration.
-2. Capture microphone audio optionally. Internal playback audio is a separate capability and may be blocked by the source app; the current optional audio source is the microphone.
+2. Capture microphone audio optionally, or enable Android 10+ internal playback capture when the source app permits it. Internal audio is currently saved as a separate WAV sidecar rather than muxed into the MP4.
 3. Generate live English captions while recording.
 4. Run a post-recording transcription correction pass for better words and timestamps.
 5. Edit subtitle text, timing, font, size, color, outline, position and animation.
@@ -18,7 +18,8 @@ ClipForge is designed for recording streams and gameplay, generating English sub
 - Android MediaProjection consent flow.
 - Foreground media-projection recording service.
 - H.264 MP4 screen capture with selectable 720p/1080p and 30/60 FPS targets.
-- Optional microphone capture is available through an explicit Android runtime permission and user toggle; it records nearby voice, not internal app playback audio.
+- Optional microphone capture is available through an explicit Android runtime permission and user toggle.
+- Optional Android 10+ playback capture uses AudioPlaybackCapture for media/game/unknown usages when the source app allows capture; it writes a separate 44.1 kHz stereo PCM WAV beside the MP4. The WAV can be opened from the recording row. It is not yet merged into the MP4.
 - Recording notification with Stop action.
 - Files saved under the app-specific Movies/ClipForge directory.
 - Saved MP4s can be opened in an installed video player through a temporary read-only FileProvider URI.
@@ -32,7 +33,8 @@ ClipForge is designed for recording streams and gameplay, generating English sub
 - Initial UI for the subtitle and editor workflow.
 
 ## Roadmap
-- [ ] Internal playback audio capture using Android AudioPlaybackCapture where permitted, then mux captured audio into the recorded MP4.
+- [x] Initial internal playback audio capture using Android AudioPlaybackCapture where permitted; save a separate WAV sidecar.
+- [ ] Mux captured playback audio into the recorded MP4 and handle unsupported/blocked source apps gracefully.
 - [ ] Live English speech recognition with timestamped caption segments.
 - [ ] Improve transcription accuracy and add correction assistance.
 - [ ] Visual subtitle styling and on-video preview.
