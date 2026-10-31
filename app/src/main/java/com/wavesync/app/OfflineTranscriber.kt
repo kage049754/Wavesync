@@ -87,7 +87,12 @@ object OfflineTranscriber {
                     val words = mutableListOf<Word>()
                     Recognizer(model, 16000.0f).use { recognizer ->
                         recognizer.setWords(true)
-                        decodeAudio(video, recognizer, words, progress)
+                        val playbackWav = File(video.parentFile, video.nameWithoutExtension + "_audio.wav")
+                        if (playbackWav.exists() && playbackWav.length() > 44L) {
+                            decodeWav(playbackWav, recognizer, words, progress)
+                        } else {
+                            decodeAudio(video, recognizer, words, progress)
+                        }
                         collectWords(recognizer.finalResult, words)
                     }
                     require(words.isNotEmpty()) { "No speech was detected in this recording" }
@@ -100,6 +105,66 @@ object OfflineTranscriber {
     }
 
     private data class Word(val text: String, val start: Double, val end: Double)
+
+    private fun decodeWav(wav: File, recognizer: Recognizer, words: MutableList<Word>, progress: (String) -> Unit) {
+        wav.inputStream().buffered().use { input ->
+            val header = ByteArray(44)
+            require(input.read(header) == header.size) { "Playback audio WAV header is incomplete" }
+            fun ascii(offset: Int, length: Int) = String(header, offset, length, Charsets.US_ASCII)
+            fun littleInt(offset: Int): Int =
+                (header[offset].toInt() and 0xff) or
+                    ((header[offset + 1].toInt() and 0xff) shl 8) or
+                    ((header[offset + 2].toInt() and 0xff) shl 16) or
+                    ((header[offset + 3].toInt() and 0xff) shl 24)
+            fun littleShort(offset: Int): Int =
+                (header[offset].toInt() and 0xff) or ((header[offset + 1].toInt() and 0xff) shl 8)
+            require(ascii(0, 4) == "RIFF" && ascii(8, 4) == "WAVE") { "Invalid playback audio WAV file" }
+            require(ascii(12, 4) == "fmt " && littleShort(20) == 1 && littleShort(22) == 2 &&
+                littleInt(24) == 44100 && littleShort(34) == 16) {
+                "Unsupported playback WAV format; expected 44.1 kHz stereo PCM"
+            }
+            require(ascii(36, 4) == "data") { "Unsupported WAV data layout" }
+            val dataBytes = littleInt(40).coerceAtLeast(0)
+            val buffer = ByteArray(16 * 1024)
+            val pending = ByteArrayOutputStream()
+            var remaining = dataBytes
+            var inputFrames = 0L
+            var outputFrames = 0L
+            var lastProgress = 0L
+            while (remaining > 0) {
+                val count = input.read(buffer, 0, minOf(buffer.size, remaining))
+                if (count < 0) break
+                if (count == 0) continue
+                remaining -= count
+                val aligned = count - count % 4
+                var offset = 0
+                while (offset < aligned) {
+                    val left = ((buffer[offset].toInt() and 0xff) or (buffer[offset + 1].toInt() shl 8)).toShort().toInt()
+                    val right = ((buffer[offset + 2].toInt() and 0xff) or (buffer[offset + 3].toInt() shl 8)).toShort().toInt()
+                    if (inputFrames * 16000L / 44100L > outputFrames) {
+                        val mono = ((left + right) / 2).coerceIn(-32768, 32767)
+                        pending.write(mono and 0xff)
+                        pending.write((mono shr 8) and 0xff)
+                        outputFrames++
+                    }
+                    inputFrames++
+                    offset += 4
+                }
+                if (pending.size() >= 32768) {
+                    val pcm = pending.toByteArray()
+                    if (recognizer.acceptWaveForm(pcm, pcm.size)) collectWords(recognizer.result, words)
+                    pending.reset()
+                }
+                val seconds = inputFrames / 44100L
+                if (seconds - lastProgress >= 5) {
+                    lastProgress = seconds
+                    main.post { progress("Transcribing captured app audio: \${seconds}s processed") }
+                }
+            }
+            val tail = pending.toByteArray()
+            if (tail.isNotEmpty() && recognizer.acceptWaveForm(tail, tail.size)) collectWords(recognizer.result, words)
+        }
+    }
 
     private fun decodeAudio(video: File, recognizer: Recognizer, words: MutableList<Word>, progress: (String) -> Unit) {
         val extractor = MediaExtractor()
