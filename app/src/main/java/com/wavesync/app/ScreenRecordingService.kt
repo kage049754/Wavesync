@@ -81,6 +81,7 @@ class ScreenRecordingService : Service() {
 
     private fun beginRecording(code:Int,data:Intent,fps:Int,quality:String,microphone:Boolean,playbackAudio:Boolean) {
         stopping = false
+        playbackFile = null
         val manager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         projection = manager.getMediaProjection(code,data)
         projection?.registerCallback(object:MediaProjection.Callback() {
