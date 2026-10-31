@@ -203,6 +203,7 @@ class ScreenRecordingService : Service() {
         try { playbackRecord?.release() } catch (_: Exception) {}
         playbackRecord = null
         if (writerStillRunning) {
+            playbackFile = null
             getSharedPreferences("clipforge", Context.MODE_PRIVATE).edit()
                 .putString("last_error", "Playback audio writer did not stop cleanly; MP4 was left untouched").apply()
         }
