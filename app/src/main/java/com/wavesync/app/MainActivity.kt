@@ -46,7 +46,6 @@ private fun ClipForgeApp(activity: MainActivity) {
     var quality by remember { mutableStateOf("1080p") }
     var isRecording by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("Ready to capture your screen") }
-    var mic by remember { mutableStateOf(false) }
     val prefs = remember { activity.getSharedPreferences("clipforge", Context.MODE_PRIVATE) }
     val projectionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK && result.data != null) {
@@ -56,7 +55,7 @@ private fun ClipForgeApp(activity: MainActivity) {
                 putExtra(ScreenRecordingService.EXTRA_RESULT_DATA, result.data)
                 putExtra(ScreenRecordingService.EXTRA_FPS, fps)
                 putExtra(ScreenRecordingService.EXTRA_QUALITY, quality)
-                putExtra(ScreenRecordingService.EXTRA_MIC, mic)
+                putExtra(ScreenRecordingService.EXTRA_MIC, false)
             }
             if (Build.VERSION.SDK_INT >= 26) activity.startForegroundService(intent) else activity.startService(intent)
             isRecording = true
@@ -123,10 +122,6 @@ private fun ClipForgeApp(activity: MainActivity) {
                     Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                         listOf(30,60).forEach { v -> FilterChip(selected=fps==v,onClick={fps=v},label={Text("$v FPS")}) }
                     }
-                    Row(verticalAlignment=Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) { Text("Microphone audio", fontWeight=FontWeight.SemiBold); Text("Records your microphone, not protected app audio", color=Muted, fontSize=10.sp) }
-                        Switch(checked=mic,onCheckedChange={mic=it})
-                    }
                 }
             }
             item {
@@ -146,7 +141,7 @@ private fun ClipForgeApp(activity: MainActivity) {
                 Column(Modifier.fillMaxWidth().background(Card, RoundedCornerShape(20.dp)).padding(16.dp), verticalArrangement=Arrangement.spacedBy(10.dp)) {
                     EditorFeature(Icons.Rounded.ContentCut,"Trim and split","Cut unwanted sections and create short clips")
                     EditorFeature(Icons.Rounded.TextFields,"Subtitle styling","Move captions; change font, size, color, outline and animation")
-                    EditorFeature(Icons.Rounded.MovieEdit,"Outro and overlays","Add an ending card, image, text or music")
+                    EditorFeature(Icons.Rounded.Movie,"Outro and overlays","Add an ending card, image, text or music")
                     EditorFeature(Icons.Rounded.Subtitles,"Subtitle correction","Edit transcript text and timing before export")
                 }
             }
