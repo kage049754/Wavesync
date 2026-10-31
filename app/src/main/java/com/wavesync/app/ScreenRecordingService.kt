@@ -158,8 +158,11 @@ class ScreenRecordingService : Service() {
                     while (playbackRunning) {
                         val count = audio.read(buffer, 0, buffer.size, AudioRecord.READ_BLOCKING)
                         if (count > 0) {
-                            wav.write(buffer, 0, count)
-                            dataBytes += count
+                            val aligned = count - count % 4
+                            if (aligned > 0) {
+                                wav.write(buffer, 0, aligned)
+                                dataBytes += aligned
+                            }
                         } else if (count < 0) break
                     }
                     wav.seek(0)
@@ -195,9 +198,14 @@ class ScreenRecordingService : Service() {
     private fun stopPlaybackCapture() {
         playbackRunning = false
         try { playbackRecord?.stop() } catch (_: Exception) {}
-        try { playbackThread?.join(2500) } catch (_: InterruptedException) { Thread.currentThread().interrupt() }
+        try { playbackThread?.join(10000) } catch (_: InterruptedException) { Thread.currentThread().interrupt() }
+        val writerStillRunning = playbackThread?.isAlive == true
         try { playbackRecord?.release() } catch (_: Exception) {}
         playbackRecord = null
+        if (writerStillRunning) {
+            getSharedPreferences("clipforge", Context.MODE_PRIVATE).edit()
+                .putString("last_error", "Playback audio writer did not stop cleanly; MP4 was left untouched").apply()
+        }
         playbackThread = null
     }
 
