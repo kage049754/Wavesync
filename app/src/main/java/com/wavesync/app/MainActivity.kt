@@ -272,6 +272,16 @@ private fun ClipForgeApp(activity: MainActivity) {
                                         activity.startActivity(view)
                                     }.onFailure { status = "No video player found or file could not be opened" }
                                 }) { Icon(Icons.Rounded.PlayArrow, contentDescription="Play recording", tint=Cyan) }
+                                val playbackAudio = File(file.parentFile, file.nameWithoutExtension + "_audio.wav")
+                                if (playbackAudio.exists() && playbackAudio.length() > 44L) {
+                                    IconButton(onClick = {
+                                        runCatching {
+                                            val uri = FileProvider.getUriForFile(activity, activity.packageName + ".fileprovider", playbackAudio)
+                                            val view = Intent(Intent.ACTION_VIEW).setDataAndType(uri, "audio/wav").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                            activity.startActivity(view)
+                                        }.onFailure { status = "No WAV audio player found" }
+                                    }) { Icon(Icons.Rounded.GraphicEq, contentDescription="Play captured app audio", tint=Purple) }
+                                }
                                 TextButton(enabled=modelReady && !asrBusy, onClick={
                                     asrBusy=true
                                     asrStatus="Preparing audio decoder..."
