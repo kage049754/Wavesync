@@ -8,7 +8,7 @@ ClipForge is designed for recording streams and gameplay, generating English sub
 
 ### Planned workflow
 1. Record the screen at 720p/1080p and 30/60 FPS when the device supports the selected encoder configuration.
-2. Capture microphone audio optionally. Internal playback audio is a separate capability and may be blocked by the source app.
+2. Capture microphone audio optionally. Internal playback audio is a separate capability and may be blocked by the source app; the current optional audio source is the microphone.
 3. Generate live English captions while recording.
 4. Run a post-recording transcription correction pass for better words and timestamps.
 5. Edit subtitle text, timing, font, size, color, outline, position and animation.
@@ -18,7 +18,7 @@ ClipForge is designed for recording streams and gameplay, generating English sub
 - Android MediaProjection consent flow.
 - Foreground media-projection recording service.
 - H.264 MP4 screen capture with selectable 720p/1080p and 30/60 FPS targets.
-- Microphone capture is currently disabled in the app UI until its runtime-permission and audio pipeline are completed.
+- Optional microphone capture is available through an explicit Android runtime permission and user toggle; it records nearby voice, not internal app playback audio.
 - Recording notification with Stop action.
 - Files saved under the app-specific Movies/ClipForge directory.
 - Saved MP4s can be opened in an installed video player through a temporary read-only FileProvider URI.
@@ -30,7 +30,6 @@ ClipForge is designed for recording streams and gameplay, generating English sub
 - Initial UI for the subtitle and editor workflow.
 
 ## Roadmap
-- [ ] Enable microphone capture with an explicit runtime permission flow.
 - [ ] Internal playback audio capture using Android AudioPlaybackCapture where permitted.
 - [ ] Live English speech recognition with timestamped caption segments.
 - [ ] Offline post-recording transcription and correction pass.
