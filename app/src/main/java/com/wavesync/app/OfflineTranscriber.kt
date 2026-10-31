@@ -96,7 +96,11 @@ object OfflineTranscriber {
                         collectWords(recognizer.finalResult, words)
                     }
                     require(words.isNotEmpty()) { "No speech was detected in this recording" }
-                    output.writeText(toSrt(words), Charsets.UTF_8)
+                    val offsetFile = File(video.parentFile, video.nameWithoutExtension + "_audio.offset")
+                    val audioOffsetSeconds = if (playbackWav.exists() && offsetFile.isFile) {
+                        offsetFile.readText().trim().toLongOrNull()?.coerceAtLeast(0L)?.div(1_000_000.0) ?: 0.0
+                    } else 0.0
+                    output.writeText(toSrt(words, audioOffsetSeconds), Charsets.UTF_8)
                 } finally { model.close() }
                 output
             }
@@ -273,13 +277,13 @@ object OfflineTranscriber {
         }
     }
 
-    private fun toSrt(words: List<Word>): String {
+    private fun toSrt(words: List<Word>, offsetSeconds: Double = 0.0): String {
         val blocks = mutableListOf<String>()
         var group = mutableListOf<Word>()
         fun flush() {
             if (group.isEmpty()) return
             val text = group.joinToString(" ") { it.text }
-            blocks.add("${timestamp(group.first().start)} --> ${timestamp(group.last().end)}\n$text")
+            blocks.add("${timestamp(group.first().start + offsetSeconds)} --> ${timestamp(group.last().end + offsetSeconds)}\n$text")
             group = mutableListOf()
         }
         for (word in words) {
