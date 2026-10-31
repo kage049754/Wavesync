@@ -24,7 +24,10 @@ ClipForge is designed for recording streams and gameplay, generating English sub
 - Saved MP4s can be opened in an installed video player through a temporary read-only FileProvider URI.
 - Recordings can be copied to the public `Movies/ClipForge` gallery folder through Android MediaStore.
 - H.264 encoder capability checks select a supported resolution/frame-rate fallback when the requested combination is unavailable.
-- Initial UI for the transcription and editor workflow.
+- Offline English speech recognition using the Vosk Android engine.
+- Optional one-time download of the approximately 40 MB English model; transcription then runs locally.
+- Post-recording audio extraction from MP4, timestamped word recognition, and SRT subtitle generation.
+- Initial UI for the subtitle and editor workflow.
 
 ## Roadmap
 - [ ] Enable microphone capture with an explicit runtime permission flow.
@@ -36,4 +39,4 @@ ClipForge is designed for recording streams and gameplay, generating English sub
 - [ ] Export presets and device capability detection.
 
 ## Compatibility and privacy
-MediaProjection requires explicit Android system consent for each capture session. Some apps prevent playback-audio capture. Actual frame rate and resolution depend on device display and hardware encoder support. The recorder stores originals in app-specific external storage; users can separately copy a recording to the public Movies/ClipForge media library. Recordings are not uploaded.
+MediaProjection requires explicit Android system consent for each capture session. Some apps prevent playback-audio capture. Actual frame rate and resolution depend on device display and hardware encoder support. The recorder stores originals in app-specific external storage; users can separately copy a recording to the public Movies/ClipForge media library. Recordings are not uploaded. The optional English model download is the only network step for the first offline transcription workflow; video and audio are processed locally.
