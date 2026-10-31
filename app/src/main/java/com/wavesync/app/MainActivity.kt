@@ -73,6 +73,10 @@ private fun ClipForgeApp(activity: MainActivity) {
             status = "Recording started. Use the notification to stop."
         } else status = "Screen capture permission was not granted"
     }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        val manager = activity.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        projectionLauncher.launch(manager.createScreenCaptureIntent())
+    }
 
     MaterialTheme(colorScheme = darkColorScheme(primary = Cyan, secondary = Purple, background = Bg, surface = Card)) {
         LazyColumn(
@@ -106,8 +110,12 @@ private fun ClipForgeApp(activity: MainActivity) {
                     Row(horizontalArrangement=Arrangement.spacedBy(10.dp)) {
                         Button(onClick={
                             if (!isRecording) {
-                                val manager = activity.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-                                projectionLauncher.launch(manager.createScreenCaptureIntent())
+                                if (Build.VERSION.SDK_INT >= 33 && activity.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                    notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                                } else {
+                                    val manager = activity.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+                                    projectionLauncher.launch(manager.createScreenCaptureIntent())
+                                }
                             } else {
                                 activity.startService(Intent(activity, ScreenRecordingService::class.java).setAction(ScreenRecordingService.ACTION_STOP))
                                 isRecording=false
