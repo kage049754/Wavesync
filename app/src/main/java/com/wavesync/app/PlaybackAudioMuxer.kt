@@ -181,8 +181,7 @@ object PlaybackAudioMuxer {
             require(audioTracks > 0) { "Encoded playback audio has no audio track" }
             muxer.start()
             started = true
-            copySamples(videoExtractor, muxer, videoMap)
-            copySamples(audioExtractor, muxer, audioMap)
+            copyInterleaved(videoExtractor, videoMap, audioExtractor, audioMap, muxer)
         } finally {
             try { if (started) muxer?.stop() } catch (_: Exception) {}
             muxer?.release()
@@ -191,18 +190,34 @@ object PlaybackAudioMuxer {
         }
     }
 
-    private fun copySamples(extractor: MediaExtractor, muxer: MediaMuxer, trackMap: IntArray) {
-        for (i in trackMap.indices) if (trackMap[i] >= 0) extractor.selectTrack(i)
+    private fun copyInterleaved(
+        videoExtractor: MediaExtractor,
+        videoMap: IntArray,
+        audioExtractor: MediaExtractor,
+        audioMap: IntArray,
+        muxer: MediaMuxer
+    ) {
+        for (i in videoMap.indices) if (videoMap[i] >= 0) videoExtractor.selectTrack(i)
+        for (i in audioMap.indices) if (audioMap[i] >= 0) audioExtractor.selectTrack(i)
         val buffer = ByteBuffer.allocate(4 * 1024 * 1024)
         val info = MediaCodec.BufferInfo()
         while (true) {
-            val sourceTrack = extractor.sampleTrackIndex
-            if (sourceTrack < 0) break
+            val videoTrack = videoExtractor.sampleTrackIndex
+            val audioTrack = audioExtractor.sampleTrackIndex
+            if (videoTrack < 0 && audioTrack < 0) break
+            val takeVideo = audioTrack < 0 || (videoTrack >= 0 &&
+                videoExtractor.sampleTime <= audioExtractor.sampleTime)
+            val extractor = if (takeVideo) videoExtractor else audioExtractor
+            val sourceTrack = if (takeVideo) videoTrack else audioTrack
+            val mapping = if (takeVideo) videoMap else audioMap
             buffer.clear()
             val size = extractor.readSampleData(buffer, 0)
-            if (size < 0) break
+            if (size < 0) {
+                extractor.advance()
+                continue
+            }
             info.set(0, size, extractor.sampleTime.coerceAtLeast(0L), extractor.sampleFlags)
-            muxer.writeSampleData(trackMap[sourceTrack], buffer, info)
+            muxer.writeSampleData(mapping[sourceTrack], buffer, info)
             extractor.advance()
         }
     }
