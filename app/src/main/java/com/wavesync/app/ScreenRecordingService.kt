@@ -24,6 +24,7 @@ import android.os.Environment
 import android.os.IBinder
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.DisplayMetrics
 import android.view.Surface
 import android.view.WindowManager
@@ -42,6 +43,8 @@ class ScreenRecordingService : Service() {
     private var playbackRecord: AudioRecord? = null
     private var playbackThread: Thread? = null
     private var playbackFile: File? = null
+    private var recordingStartedAtNs: Long = 0L
+    private var playbackAudioOffsetUs: Long = 0L
     private val mainHandler = Handler(Looper.getMainLooper())
     @Volatile private var playbackRunning = false
 
@@ -82,6 +85,7 @@ class ScreenRecordingService : Service() {
     private fun beginRecording(code:Int,data:Intent,fps:Int,quality:String,microphone:Boolean,playbackAudio:Boolean) {
         stopping = false
         playbackFile = null
+        playbackAudioOffsetUs = 0L
         val manager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         projection = manager.getMediaProjection(code,data)
         projection?.registerCallback(object:MediaProjection.Callback() {
@@ -116,6 +120,7 @@ class ScreenRecordingService : Service() {
         val surface: Surface = media.surface
         display = projection!!.createVirtualDisplay("ClipForgeCapture",width,height,metrics.densityDpi,DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,surface,null,null)
         media.start()
+        recordingStartedAtNs = SystemClock.elapsedRealtimeNanos()
         if (playbackAudio) {
             if (Build.VERSION.SDK_INT >= 29) startPlaybackCapture(projection ?: error("Screen projection was not initialized"), outputFile ?: error("Recording file was not created"))
             else getSharedPreferences("clipforge", Context.MODE_PRIVATE).edit().putString("last_error", "App audio capture requires Android 10 or newer").apply()
@@ -146,6 +151,7 @@ class ScreenRecordingService : Service() {
         check(audio.state == AudioRecord.STATE_INITIALIZED) { "Could not initialize app audio capture" }
         playbackFile = File(videoFile.parentFile, videoFile.nameWithoutExtension + "_audio.wav")
         playbackRecord = audio
+        playbackAudioOffsetUs = ((SystemClock.elapsedRealtimeNanos() - recordingStartedAtNs) / 1000L).coerceAtLeast(0L)
         playbackRunning = true
         audio.startRecording()
         playbackThread = Thread {
@@ -262,7 +268,7 @@ class ScreenRecordingService : Service() {
                 .build()
             try { (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIFICATION_ID, notification) } catch (_: Exception) {}
             Thread {
-                val result = PlaybackAudioMuxer.mux(saved, wav)
+                val result = PlaybackAudioMuxer.mux(saved, wav, playbackAudioOffsetUs)
                 val prefs = getSharedPreferences("clipforge", Context.MODE_PRIVATE).edit()
                 if (result.isSuccess) {
                     prefs.putString("last_mux_status", "Captured app audio was added to the MP4")
