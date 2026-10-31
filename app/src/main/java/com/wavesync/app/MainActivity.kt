@@ -14,6 +14,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -65,6 +67,22 @@ private fun ClipForgeApp(activity: MainActivity) {
             ?.sortedByDescending { it.lastModified() } ?: emptyList()
     }
     LaunchedEffect(Unit) { refreshRecordings() }
+    DisposableEffect(activity) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                refreshRecordings()
+                val prefs = activity.getSharedPreferences("clipforge", Context.MODE_PRIVATE)
+                isRecording = prefs.getBoolean("recording_active", false)
+                val lastError = prefs.getString("last_error", "").orEmpty()
+                if (lastError.isNotBlank()) status = "Recording error: " + lastError
+                else if (!isRecording && prefs.getString("last_recording", "").orEmpty().isNotBlank()) {
+                    status = "Recording saved. Your library is up to date."
+                }
+            }
+        }
+        activity.lifecycle.addObserver(observer)
+        onDispose { activity.lifecycle.removeObserver(observer) }
+    }
     val projectionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK && result.data != null) {
             val intent = Intent(activity, ScreenRecordingService::class.java).apply {
