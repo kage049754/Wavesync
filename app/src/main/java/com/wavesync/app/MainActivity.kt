@@ -69,20 +69,40 @@ private fun ClipForgeApp(activity: MainActivity) {
     }
     LaunchedEffect(Unit) { refreshRecordings() }
     DisposableEffect(activity) {
+        val prefs = activity.getSharedPreferences("clipforge", Context.MODE_PRIVATE)
+        val updateStatus = {
+            val lastError = prefs.getString("last_error", "").orEmpty()
+            val muxStatus = prefs.getString("last_mux_status", "").orEmpty()
+            if (lastError.isNotBlank()) status = "Recording issue: " + lastError
+            else if (muxStatus.isNotBlank()) status = muxStatus
+        }
+        val prefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == "last_mux_status" || key == "last_error" || key == "recording_active") {
+                activity.runOnUiThread {
+                    isRecording = prefs.getBoolean("recording_active", false)
+                    updateStatus()
+                    if (!isRecording) refreshRecordings()
+                }
+            }
+        }
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 refreshRecordings()
-                val prefs = activity.getSharedPreferences("clipforge", Context.MODE_PRIVATE)
                 isRecording = prefs.getBoolean("recording_active", false)
-                val lastError = prefs.getString("last_error", "").orEmpty()
-                if (lastError.isNotBlank()) status = "Recording error: " + lastError
-                else if (!isRecording && prefs.getString("last_recording", "").orEmpty().isNotBlank()) {
+                updateStatus()
+                if (prefs.getString("last_mux_status", "").orEmpty().isBlank() &&
+                    prefs.getString("last_error", "").orEmpty().isBlank() &&
+                    !isRecording && prefs.getString("last_recording", "").orEmpty().isNotBlank()) {
                     status = "Recording saved. Your library is up to date."
                 }
             }
         }
+        prefs.registerOnSharedPreferenceChangeListener(prefsListener)
         activity.lifecycle.addObserver(observer)
-        onDispose { activity.lifecycle.removeObserver(observer) }
+        onDispose {
+            prefs.unregisterOnSharedPreferenceChangeListener(prefsListener)
+            activity.lifecycle.removeObserver(observer)
+        }
     }
     val projectionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK && result.data != null) {
