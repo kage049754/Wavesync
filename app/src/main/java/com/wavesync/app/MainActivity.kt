@@ -49,6 +49,7 @@ class MainActivity : ComponentActivity() {
 private fun ClipForgeApp(activity: MainActivity) {
     var fps by remember { mutableIntStateOf(60) }
     var quality by remember { mutableStateOf("1080p") }
+    var microphoneEnabled by remember { mutableStateOf(false) }
     var isRecording by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("Ready to capture your screen") }
     var recordings by remember { mutableStateOf(emptyList<File>()) }
@@ -69,7 +70,7 @@ private fun ClipForgeApp(activity: MainActivity) {
                 putExtra(ScreenRecordingService.EXTRA_RESULT_DATA, result.data)
                 putExtra(ScreenRecordingService.EXTRA_FPS, fps)
                 putExtra(ScreenRecordingService.EXTRA_QUALITY, quality)
-                putExtra(ScreenRecordingService.EXTRA_MIC, false)
+                putExtra(ScreenRecordingService.EXTRA_MIC, microphoneEnabled)
             }
             if (Build.VERSION.SDK_INT >= 26) activity.startForegroundService(intent) else activity.startService(intent)
             isRecording = true
@@ -79,6 +80,10 @@ private fun ClipForgeApp(activity: MainActivity) {
     val notificationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         val manager = activity.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         projectionLauncher.launch(manager.createScreenCaptureIntent())
+    }
+    val microphonePermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        microphoneEnabled = granted
+        status = if (granted) "Microphone audio enabled for the next recording" else "Microphone permission was denied"
     }
 
     MaterialTheme(colorScheme = darkColorScheme(primary = Cyan, secondary = Purple, background = Bg, surface = Card)) {
@@ -143,6 +148,16 @@ private fun ClipForgeApp(activity: MainActivity) {
                     Text("Frame rate", color=Muted, fontSize=12.sp)
                     Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                         listOf(30,60).forEach { v -> FilterChip(selected=fps==v,onClick={fps=v},label={Text("$v FPS")}) }
+                    }
+                    Row(verticalAlignment=Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Microphone audio", fontSize=13.sp, fontWeight=FontWeight.SemiBold)
+                            Text("Record nearby voice; this does not capture app playback audio.", color=Muted, fontSize=10.sp)
+                        }
+                        Switch(checked=microphoneEnabled, onCheckedChange={ enabled ->
+                            if (enabled) microphonePermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                            else microphoneEnabled=false
+                        })
                     }
                 }
             }
