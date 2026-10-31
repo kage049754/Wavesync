@@ -336,7 +336,7 @@ private fun ClipForgeApp(activity: MainActivity) {
                             }
                         }
                     }
-                    Text("Original MP4s stay in app storage. Use SRT beside a recording to create an offline timestamped subtitle file; internal playback audio capture is not implemented yet.", color=Muted, fontSize=10.sp, lineHeight=15.sp)
+                    Text("Original MP4s stay in app storage. When an internal-audio WAV sidecar exists, SRT transcription uses that captured app audio first; otherwise it uses an audio track in the MP4.", color=Muted, fontSize=10.sp, lineHeight=15.sp)
                 }
             }
             item {
