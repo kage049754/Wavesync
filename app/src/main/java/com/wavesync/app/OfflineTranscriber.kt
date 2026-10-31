@@ -70,6 +70,7 @@ object OfflineTranscriber {
                     target.deleteRecursively()
                     check(extractedModel.renameTo(target)) { "Could not install downloaded model" }
                     staging.deleteRecursively()
+                    Unit
                 } finally { connection.disconnect() }
             }
             main.post { complete(result) }
