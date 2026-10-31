@@ -22,11 +22,11 @@ ClipForge is designed for recording streams and gameplay, generating English sub
 - Recording notification with Stop action.
 - Files saved under the app-specific Movies/ClipForge directory.
 - Saved MP4s can be opened in an installed video player through a temporary read-only FileProvider URI.
+- Recordings can be copied to the public `Movies/ClipForge` gallery folder through Android MediaStore.
+- H.264 encoder capability checks select a supported resolution/frame-rate fallback when the requested combination is unavailable.
 - Initial UI for the transcription and editor workflow.
 
 ## Roadmap
-- [ ] Add encoder capability detection and fallback when a requested resolution or frame rate is unsupported.
-- [ ] Export finished videos to the public media library.
 - [ ] Enable microphone capture with an explicit runtime permission flow.
 - [ ] Internal playback audio capture using Android AudioPlaybackCapture where permitted.
 - [ ] Live English speech recognition with timestamped caption segments.
@@ -36,4 +36,4 @@ ClipForge is designed for recording streams and gameplay, generating English sub
 - [ ] Export presets and device capability detection.
 
 ## Compatibility and privacy
-MediaProjection requires explicit Android system consent for each capture session. Some apps prevent playback-audio capture. Actual frame rate and resolution depend on device display and hardware encoder support. The initial recorder stores videos in app-specific external storage and does not upload recordings.
+MediaProjection requires explicit Android system consent for each capture session. Some apps prevent playback-audio capture. Actual frame rate and resolution depend on device display and hardware encoder support. The recorder stores originals in app-specific external storage; users can separately copy a recording to the public Movies/ClipForge media library. Recordings are not uploaded.
