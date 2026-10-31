@@ -43,7 +43,7 @@ class ScreenRecordingService : Service() {
                 val data = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(EXTRA_RESULT_DATA, Intent::class.java) else @Suppress("DEPRECATION") (intent.getParcelableExtra(EXTRA_RESULT_DATA) as? Intent)
                 if (code == 0 || data == null) { stopSelf(); return START_NOT_STICKY }
                 try { beginRecording(code, data, intent.getIntExtra(EXTRA_FPS,60), intent.getStringExtra(EXTRA_QUALITY) ?: "1080p", intent.getBooleanExtra(EXTRA_MIC,false)) }
-                catch (e: Exception) { getSharedPreferences("clipforge", Context.MODE_PRIVATE).edit().putString("last_error", e.message ?: "Recording could not start").apply(); stopRecording() }
+                catch (e: Exception) { getSharedPreferences("clipforge", Context.MODE_PRIVATE).edit().putString("last_error", e.message ?: "Recording could not start").putBoolean("recording_active",false).apply(); stopRecording() }
             }
         }
         return START_NOT_STICKY
@@ -101,7 +101,7 @@ class ScreenRecordingService : Service() {
         val surface: Surface = media.surface
         display = projection!!.createVirtualDisplay("ClipForgeCapture",width,height,metrics.densityDpi,DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,surface,null,null)
         media.start()
-        getSharedPreferences("clipforge",Context.MODE_PRIVATE).edit().putString("last_recording",outputFile!!.absolutePath).putString("last_error","").apply()
+        getSharedPreferences("clipforge",Context.MODE_PRIVATE).edit().putString("last_recording",outputFile!!.absolutePath).putString("last_error","").putBoolean("recording_active",true).apply()
     }
 
     private fun chooseSupportedCapture(requestedWidth: Int, requestedHeight: Int, requestedFps: Int): Triple<Int, Int, Int> {
@@ -136,7 +136,7 @@ class ScreenRecordingService : Service() {
         try { projection?.stop() } catch (_:Exception) {}
         recorder=null; display=null; projection=null
         val saved=outputFile?.takeIf { it.exists() && it.length()>0L }
-        getSharedPreferences("clipforge",Context.MODE_PRIVATE).edit().putString("last_recording",saved?.absolutePath ?: "").apply()
+        getSharedPreferences("clipforge",Context.MODE_PRIVATE).edit().putString("last_recording",saved?.absolutePath ?: "").putBoolean("recording_active",false).apply()
         outputFile=null
         try { (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIFICATION_ID) } catch (_:Exception) {}
         stopForeground(STOP_FOREGROUND_REMOVE)
