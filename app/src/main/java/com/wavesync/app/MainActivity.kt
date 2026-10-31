@@ -2,6 +2,7 @@ package com.wavesync.app
 
 import android.content.Context
 import android.content.Intent
+import androidx.core.content.FileProvider
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
@@ -171,6 +172,13 @@ private fun ClipForgeApp(activity: MainActivity) {
                                     Text(file.name, fontWeight=FontWeight.SemiBold, fontSize=12.sp)
                                     Text(android.text.format.Formatter.formatShortFileSize(activity, file.length()) + " • " + java.text.SimpleDateFormat("MMM d, yyyy  h:mm a", java.util.Locale.getDefault()).format(java.util.Date(file.lastModified())), color=Muted, fontSize=10.sp)
                                 }
+                                IconButton(onClick = {
+                                    runCatching {
+                                        val uri = FileProvider.getUriForFile(activity, activity.packageName + ".fileprovider", file)
+                                        val view = Intent(Intent.ACTION_VIEW).setDataAndType(uri, "video/mp4").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        activity.startActivity(view)
+                                    }.onFailure { status = "No video player found or file could not be opened" }
+                                }) { Icon(Icons.Rounded.PlayArrow, contentDescription="Play recording", tint=Cyan) }
                             }
                         }
                     }
