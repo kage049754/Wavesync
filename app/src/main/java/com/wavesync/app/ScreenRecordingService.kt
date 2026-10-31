@@ -86,6 +86,10 @@ class ScreenRecordingService : Service() {
         stopping = false
         playbackFile = null
         playbackAudioOffsetUs = 0L
+        getSharedPreferences("clipforge", Context.MODE_PRIVATE).edit()
+            .putString("last_error", "")
+            .putString("last_mux_status", "")
+            .apply()
         val manager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         projection = manager.getMediaProjection(code,data)
         projection?.registerCallback(object:MediaProjection.Callback() {
@@ -271,7 +275,8 @@ class ScreenRecordingService : Service() {
                 val result = PlaybackAudioMuxer.mux(saved, wav, playbackAudioOffsetUs)
                 val prefs = getSharedPreferences("clipforge", Context.MODE_PRIVATE).edit()
                 if (result.isSuccess) {
-                    prefs.putString("last_mux_status", "Captured app audio was added to the MP4")
+                    prefs.putString("last_error", "")
+                        .putString("last_mux_status", "Captured app audio was added to the MP4")
                 } else {
                     prefs.putString("last_mux_status", "Audio mux failed; original MP4 and WAV were preserved")
                         .putString("last_error", "Audio mux failed: ${result.exceptionOrNull()?.message ?: "unknown error"}. Original MP4 was preserved.")
