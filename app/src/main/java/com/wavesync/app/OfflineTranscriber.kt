@@ -86,6 +86,7 @@ object OfflineTranscriber {
                 try {
                     val words = mutableListOf<Word>()
                     Recognizer(model, 16000.0f).use { recognizer ->
+                        recognizer.setWords(true)
                         decodeAudio(video, recognizer, words, progress)
                         collectWords(recognizer.finalResult, words)
                     }
