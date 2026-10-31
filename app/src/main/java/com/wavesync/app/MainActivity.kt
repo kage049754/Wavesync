@@ -315,14 +315,39 @@ private fun ClipForgeApp(activity: MainActivity) {
                 },
                 confirmButton={
                     TextButton(onClick={
-                        runCatching { editingSubtitle?.writeText(subtitleDraft, Charsets.UTF_8) }
-                            .onSuccess { status="Subtitle changes saved" }
-                            .onFailure { status="Could not save subtitles: " + (it.message ?: "unknown error") }
-                        editingSubtitle=null
-                    }) { Text("Save") }
+                        runCatching {
+                            validateSrt(subtitleDraft)
+                            editingSubtitle?.writeText(subtitleDraft, Charsets.UTF_8)
+                                ?: error("No subtitle file selected")
+                        }
+                            .onSuccess { status="Subtitle changes saved"; editingSubtitle=null }
+                            .onFailure { status="Subtitle not saved: " + (it.message ?: "invalid SRT") }
+                    }) { Text("Validate and save") }
                 },
                 dismissButton={ TextButton(onClick={editingSubtitle=null}) { Text("Cancel") } }
             )
+        }
+    }
+}
+
+private fun validateSrt(content: String) {
+    val normalized = content.replace("\\r\\n", "\\n").trim()
+    require(normalized.isNotEmpty()) { "Subtitle file is empty" }
+    val blocks = normalized.split(Regex("\\n\\s*\\n+"))
+    val timing = Regex("^(\\\\d{2,}:\\\\d{2}:\\\\d{2},\\\\d{3})\\\\s+-->\\\\s+(\\\\d{2,}:\\\\d{2}:\\\\d{2},\\\\d{3})$")
+    blocks.forEachIndexed { index, block ->
+        val lines = block.lines().filter { it.isNotBlank() }
+        require(lines.size >= 3) { "Subtitle block ${index + 1} needs a number, timestamp and text" }
+        require(lines.first().trim().toIntOrNull() != null) { "Subtitle block ${index + 1} has an invalid cue number" }
+        val match = timing.matchEntire(lines[1].trim())
+            ?: throw IllegalArgumentException("Subtitle block ${index + 1} has an invalid timestamp")
+        fun toMillis(value: String): Long {
+            val parts = value.split(':', ',')
+            return parts[0].toLong() * 3_600_000 + parts[1].toLong() * 60_000 +
+                parts[2].toLong() * 1_000 + parts[3].toLong()
+        }
+        require(toMillis(match.groupValues[2]) > toMillis(match.groupValues[1])) {
+            "Subtitle block ${index + 1} ends before it starts"
         }
     }
 }
