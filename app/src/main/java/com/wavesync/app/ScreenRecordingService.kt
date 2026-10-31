@@ -15,6 +15,10 @@ import android.media.AudioRecord
 import android.media.AudioFormat
 import android.media.AudioPlaybackCaptureConfiguration
 import android.media.AudioAttributes
+import android.media.MediaCodecList
+import android.media.MediaFormat
+import android.media.projection.MediaProjection
+import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Environment
 import android.os.IBinder
@@ -22,6 +26,7 @@ import android.util.DisplayMetrics
 import android.view.Surface
 import android.view.WindowManager
 import java.io.File
+import java.io.RandomAccessFile
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -108,7 +113,7 @@ class ScreenRecordingService : Service() {
         display = projection!!.createVirtualDisplay("ClipForgeCapture",width,height,metrics.densityDpi,DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,surface,null,null)
         media.start()
         if (playbackAudio) {
-            if (Build.VERSION.SDK_INT >= 29) startPlaybackCapture(projection!!, outputFile!!)
+            if (Build.VERSION.SDK_INT >= 29) startPlaybackCapture(projection ?: error("Screen projection was not initialized"), outputFile ?: error("Recording file was not created"))
             else getSharedPreferences("clipforge", Context.MODE_PRIVATE).edit().putString("last_error", "App audio capture requires Android 10 or newer").apply()
         }
         getSharedPreferences("clipforge",Context.MODE_PRIVATE).edit().putString("last_recording",outputFile!!.absolutePath).putString("last_error","").putBoolean("recording_active",true).apply()
@@ -155,9 +160,9 @@ class ScreenRecordingService : Service() {
                         } else if (count < 0) break
                     }
                     wav.seek(0)
-                    wav.writeBytes("RIFF")
+                    wav.write("RIFF".toByteArray(Charsets.US_ASCII))
                     wav.writeIntLE((36L + dataBytes).coerceAtMost(0xffffffffL).toInt())
-                    wav.writeBytes("WAVEfmt ")
+                    wav.write("WAVEfmt ".toByteArray(Charsets.US_ASCII))
                     wav.writeIntLE(16)
                     wav.writeShortLE(1)
                     wav.writeShortLE(2)
@@ -165,7 +170,7 @@ class ScreenRecordingService : Service() {
                     wav.writeIntLE(44100 * 4)
                     wav.writeShortLE(4)
                     wav.writeShortLE(16)
-                    wav.writeBytes("data")
+                    wav.write("data".toByteArray(Charsets.US_ASCII))
                     wav.writeIntLE(dataBytes.coerceAtMost(0xffffffffL).toInt())
                 }
                 if (dataBytes == 0L) target.delete()
