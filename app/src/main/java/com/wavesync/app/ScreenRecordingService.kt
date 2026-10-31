@@ -156,6 +156,7 @@ class ScreenRecordingService : Service() {
         playbackFile = File(videoFile.parentFile, videoFile.nameWithoutExtension + "_audio.wav")
         playbackRecord = audio
         playbackAudioOffsetUs = ((SystemClock.elapsedRealtimeNanos() - recordingStartedAtNs) / 1000L).coerceAtLeast(0L)
+        File(videoFile.parentFile, videoFile.nameWithoutExtension + "_audio.offset").writeText(playbackAudioOffsetUs.toString())
         playbackRunning = true
         audio.startRecording()
         playbackThread = Thread {
