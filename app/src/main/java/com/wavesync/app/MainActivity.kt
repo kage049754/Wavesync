@@ -58,6 +58,7 @@ private fun ClipForgeApp(activity: MainActivity) {
     var asrStatus by remember { mutableStateOf(if (modelReady) "Offline English model is ready" else "Download the 40 MB English model once to enable offline transcription") }
     var editingSubtitle by remember { mutableStateOf<File?>(null) }
     var subtitleDraft by remember { mutableStateOf("") }
+    var subtitleImportTarget by remember { mutableStateOf<File?>(null) }
     val refreshRecordings = {
         val folder = File(activity.getExternalFilesDir(Environment.DIRECTORY_MOVIES), "ClipForge")
         recordings = folder.listFiles { file -> file.isFile && file.extension.equals("mp4", true) }
@@ -86,6 +87,22 @@ private fun ClipForgeApp(activity: MainActivity) {
     val microphonePermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         microphoneEnabled = granted
         status = if (granted) "Microphone audio enabled for the next recording" else "Microphone permission was denied"
+    }
+    val subtitleImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val video = subtitleImportTarget
+        if (uri != null && video != null) {
+            runCatching {
+                val destination = File(video.parentFile, video.nameWithoutExtension + ".srt")
+                activity.contentResolver.openInputStream(uri)?.use { input ->
+                    destination.outputStream().use { output -> input.copyTo(output) }
+                } ?: error("The selected subtitle file could not be opened")
+                subtitleDraft = destination.readText(Charsets.UTF_8)
+                editingSubtitle = destination
+                status = "SRT imported. Review it before saving."
+            }.onFailure { status = "SRT import failed: " + (it.message ?: "unknown error") }
+        }
+        subtitleImportTarget = null
+        refreshRecordings()
     }
 
     MaterialTheme(colorScheme = darkColorScheme(primary = Cyan, secondary = Purple, background = Bg, surface = Card)) {
@@ -236,6 +253,22 @@ private fun ClipForgeApp(activity: MainActivity) {
                                         subtitleDraft = subtitle.readText()
                                         editingSubtitle = subtitle
                                     }) { Icon(Icons.Rounded.Edit, contentDescription="Edit subtitles", tint=Purple) }
+                                }
+                                TextButton(onClick={
+                                    subtitleImportTarget = file
+                                    subtitleImportLauncher.launch(arrayOf("application/x-subrip", "text/plain", "application/octet-stream"))
+                                }) { Text("Import SRT", color=Muted, fontSize=10.sp) }
+                                val subtitleFile = File(file.parentFile, file.nameWithoutExtension + ".srt")
+                                if (subtitleFile.exists()) {
+                                    IconButton(onClick={
+                                        runCatching {
+                                            val uri = FileProvider.getUriForFile(activity, activity.packageName + ".fileprovider", subtitleFile)
+                                            val share = Intent(Intent.ACTION_SEND).setType("application/x-subrip")
+                                                .putExtra(Intent.EXTRA_STREAM, uri)
+                                                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                            activity.startActivity(Intent.createChooser(share, "Export subtitles"))
+                                        }.onFailure { status = "SRT export failed: " + (it.message ?: "unknown error") }
+                                    }) { Icon(Icons.Rounded.Share, contentDescription="Share or export SRT", tint=Cyan) }
                                 }
                                 IconButton(onClick = {
                                     runCatching {
