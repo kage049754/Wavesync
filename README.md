@@ -27,14 +27,15 @@ ClipForge is designed for recording streams and gameplay, generating English sub
 - Offline English speech recognition using the Vosk Android engine.
 - Optional one-time download of the approximately 40 MB English model; transcription then runs locally.
 - Post-recording audio extraction from MP4, timestamped word recognition, and SRT subtitle generation.
-- Basic SRT text/timestamp editor with save-back to the subtitle file.
+- SRT import for existing subtitle files and sharing/export of generated or edited SRT files.
+- Basic SRT text/timestamp editor with cue-number, timestamp-format, and start/end validation before saving.
 - Initial UI for the subtitle and editor workflow.
 
 ## Roadmap
-- [ ] Internal playback audio capture using Android AudioPlaybackCapture where permitted.
+- [ ] Internal playback audio capture using Android AudioPlaybackCapture where permitted, then mux captured audio into the recorded MP4.
 - [ ] Live English speech recognition with timestamped caption segments.
-- [ ] Offline post-recording transcription and correction pass.
-- [ ] SRT import/export workflows, visual subtitle styling, and on-video preview.
+- [ ] Improve transcription accuracy and add correction assistance.
+- [ ] Visual subtitle styling and on-video preview.
 - [ ] Timeline editor: trim, split, overlays, outro and audio mix.
 - [ ] Export presets and device capability detection.
 
