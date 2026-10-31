@@ -31,6 +31,7 @@ class ScreenRecordingService : Service() {
     private var recorder: MediaRecorder? = null
     private var display: VirtualDisplay? = null
     private var outputFile: File? = null
+    private var stopping = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -67,6 +68,7 @@ class ScreenRecordingService : Service() {
     }
 
     private fun beginRecording(code:Int,data:Intent,fps:Int,quality:String,microphone:Boolean) {
+        stopping = false
         val manager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         projection = manager.getMediaProjection(code,data)
         projection?.registerCallback(object:MediaProjection.Callback() {
@@ -130,6 +132,8 @@ class ScreenRecordingService : Service() {
     }
 
     private fun stopRecording() {
+        if (stopping) return
+        stopping = true
         try { recorder?.stop() } catch (_:Exception) {}
         try { display?.release() } catch (_:Exception) {}
         try { recorder?.reset(); recorder?.release() } catch (_:Exception) {}
@@ -140,6 +144,7 @@ class ScreenRecordingService : Service() {
         outputFile=null
         try { (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIFICATION_ID) } catch (_:Exception) {}
         stopForeground(STOP_FOREGROUND_REMOVE)
+        stopping = false
         stopSelf()
     }
 
