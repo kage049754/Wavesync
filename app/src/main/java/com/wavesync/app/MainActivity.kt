@@ -56,6 +56,8 @@ private fun ClipForgeApp(activity: MainActivity) {
     var modelReady by remember { mutableStateOf(OfflineTranscriber.isModelInstalled(activity)) }
     var asrBusy by remember { mutableStateOf(false) }
     var asrStatus by remember { mutableStateOf(if (modelReady) "Offline English model is ready" else "Download the 40 MB English model once to enable offline transcription") }
+    var editingSubtitle by remember { mutableStateOf<File?>(null) }
+    var subtitleDraft by remember { mutableStateOf("") }
     val refreshRecordings = {
         val folder = File(activity.getExternalFilesDir(Environment.DIRECTORY_MOVIES), "ClipForge")
         recordings = folder.listFiles { file -> file.isFile && file.extension.equals("mp4", true) }
@@ -228,6 +230,13 @@ private fun ClipForgeApp(activity: MainActivity) {
                                             .onFailure { asrStatus="Transcription failed: " + (it.message ?: "unknown error") }
                                     }
                                 }) { Text("SRT", color=if(modelReady && !asrBusy) Cyan else Muted, fontSize=11.sp) }
+                                if (File(file.parentFile, file.nameWithoutExtension + ".srt").exists()) {
+                                    IconButton(onClick={
+                                        val subtitle = File(file.parentFile, file.nameWithoutExtension + ".srt")
+                                        subtitleDraft = subtitle.readText()
+                                        editingSubtitle = subtitle
+                                    }) { Icon(Icons.Rounded.Edit, contentDescription="Edit subtitles", tint=Purple) }
+                                }
                                 IconButton(onClick = {
                                     runCatching {
                                         val values = ContentValues().apply {
@@ -256,6 +265,31 @@ private fun ClipForgeApp(activity: MainActivity) {
             item {
                 Text("Capture depends on Android MediaProjection approval. Some streaming apps block playback-audio capture. Screen recording is not guaranteed to sustain 1080p at 60 FPS on every device.", color=Muted, fontSize=10.sp, lineHeight=15.sp)
             }
+        }
+        if (editingSubtitle != null) {
+            AlertDialog(
+                onDismissRequest={ editingSubtitle=null },
+                title={ Text("Edit subtitle file") },
+                text={
+                    OutlinedTextField(
+                        value=subtitleDraft,
+                        onValueChange={ subtitleDraft=it },
+                        modifier=Modifier.fillMaxWidth().heightIn(min=180.dp,max=420.dp),
+                        minLines=8,
+                        maxLines=16,
+                        label={ Text("SRT subtitles and timestamps") }
+                    )
+                },
+                confirmButton={
+                    TextButton(onClick={
+                        runCatching { editingSubtitle?.writeText(subtitleDraft, Charsets.UTF_8) }
+                            .onSuccess { status="Subtitle changes saved" }
+                            .onFailure { status="Could not save subtitles: " + (it.message ?: "unknown error") }
+                        editingSubtitle=null
+                    }) { Text("Save") }
+                },
+                dismissButton={ TextButton(onClick={editingSubtitle=null}) { Text("Cancel") } }
+            )
         }
     }
 }
