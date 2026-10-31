@@ -165,9 +165,13 @@ object PlaybackAudioMuxer {
                         val rotation = format.getInteger("rotation-degrees")
                         if (rotation in listOf(0, 90, 180, 270)) muxer.setOrientationHint(rotation)
                     }
-                    videoTracks++
+                    if (videoTracks == 0) {
+                        videoMap[i] = muxer.addTrack(format)
+                        videoTracks++
+                    }
+                } else if (mime.startsWith("audio/")) {
+                    videoMap[i] = muxer.addTrack(format)
                 }
-                videoMap[i] = muxer.addTrack(format)
             }
             require(videoTracks > 0) { "Original MP4 has no video track" }
             var audioTracks = 0
@@ -200,7 +204,12 @@ object PlaybackAudioMuxer {
     ) {
         for (i in videoMap.indices) if (videoMap[i] >= 0) videoExtractor.selectTrack(i)
         for (i in audioMap.indices) if (audioMap[i] >= 0) audioExtractor.selectTrack(i)
-        val buffer = ByteBuffer.allocate(4 * 1024 * 1024)
+        val largestSampleHint = (0 until videoExtractor.trackCount).mapNotNull { index ->
+            videoExtractor.getTrackFormat(index).let { if (it.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) it.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE) else null }
+        }.plus((0 until audioExtractor.trackCount).mapNotNull { index ->
+            audioExtractor.getTrackFormat(index).let { if (it.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) it.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE) else null }
+        }).maxOrNull() ?: (4 * 1024 * 1024)
+        val buffer = ByteBuffer.allocate(largestSampleHint.coerceIn(4 * 1024 * 1024, 32 * 1024 * 1024))
         val info = MediaCodec.BufferInfo()
         while (true) {
             val videoTrack = videoExtractor.sampleTrackIndex
