@@ -117,7 +117,7 @@ private fun ClipForgeApp(activity: MainActivity) {
             }
             if (Build.VERSION.SDK_INT >= 26) activity.startForegroundService(intent) else activity.startService(intent)
             isRecording = true
-            status = "Recording started. Use the notification to stop."
+            status = "Recording started. Use the floating controls over other apps."
         } else status = "Screen capture permission was not granted"
     }
     val notificationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
@@ -181,7 +181,10 @@ private fun ClipForgeApp(activity: MainActivity) {
                     Row(horizontalArrangement=Arrangement.spacedBy(10.dp)) {
                         Button(onClick={
                             if (!isRecording) {
-                                if (Build.VERSION.SDK_INT >= 33 && activity.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                if (Build.VERSION.SDK_INT >= 23 && !android.provider.Settings.canDrawOverlays(activity)) {
+                                    status = "Allow ClipForge to display the floating recording controls, then tap Start again."
+                                    activity.startActivity(Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:" + activity.packageName)))
+                                } else if (Build.VERSION.SDK_INT >= 33 && activity.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
                                     notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
                                 } else {
                                     val manager = activity.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
