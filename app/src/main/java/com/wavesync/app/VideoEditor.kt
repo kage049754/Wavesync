@@ -26,7 +26,6 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.C
 import androidx.media3.common.audio.GainProcessor
-import androidx.media3.common.audio.DefaultGainProvider
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.CanvasOverlay
 import androidx.media3.effect.OverlayEffect
@@ -144,7 +143,7 @@ fun VideoEditorDialog(
                                 TextButton(onClick = { selectedClip = index; position = clip.sourceStartMs; player?.seekTo(position.toInt()) }) { Text("Select") }
                                 TextButton(enabled = index > 0, onClick = { clips = reorderClips(clips, index, index - 1); selectedClip = index - 1 }) { Text("←") }
                                 TextButton(enabled = index < clips.lastIndex, onClick = { clips = reorderClips(clips, index, index + 1); selectedClip = index + 1 }) { Text("→") }
-                                TextButton(enabled = clips.size > 1, onClick = { clips = clips.filterIndexed { i, _ -> i != index }.resequence(); selectedClip = (index - 1).coerceAtLeast(0) }) { Text("Delete") }
+                                TextButton(enabled = clips.size > 1, onClick = { clips = clips.filterIndexed { i, _ -> i != index }; selectedClip = (index - 1).coerceAtLeast(0) }) { Text("Delete") }
                             }
                         }
                     }
@@ -153,7 +152,10 @@ fun VideoEditorDialog(
                     Button(enabled = clips.isNotEmpty() && position > 0L && position < duration, onClick = {
                         val i = selectedClip.coerceIn(0, clips.lastIndex); val clip = clips[i]
                         if (position > clip.sourceStartMs && position < clip.sourceEndMs) {
-                            clips = clips.toMutableList().also { it[i] = clip.copy(sourceEndMs = position); it.add(i + 1, TimelineClip(System.nanoTime(), position, clip.sourceEndMs, 0L)) }.resequence()
+                            clips = clips.toMutableList().also {
+                                it[i] = clip.copy(sourceEndMs = position)
+                                it.add(i + 1, TimelineClip(System.nanoTime(), position, clip.sourceEndMs, clip.timelineStartMs + (position - clip.sourceStartMs)))
+                            }
                             selectedClip = i + 1
                         }
                     }) { Text("Split at playhead") }
@@ -179,7 +181,7 @@ fun VideoEditorDialog(
                 Text("Clips can be moved into gaps; overlapping clips are prevented in this single-video track.")
                 Text("Trim selected clip")
                 Text("In: " + (activeClip?.let { clock(it.sourceStartMs) } ?: "--"))
-                Slider(value = (activeClip?.sourceStartMs ?: 0L).toFloat().coerceIn(0f, maxDuration), onValueChange = { v -> activeClip?.let { old -> clips = clips.toMutableList().also { it[selectedClip] = old.copy(sourceStartMs = v.toLong().coerceAtMost(old.sourceEndMs - 250L)) }.resequence() } }, valueRange = 0f..maxDuration)
+                Slider(value = (activeClip?.sourceStartMs ?: 0L).toFloat().coerceIn(0f, maxDuration), onValueChange = { v -> activeClip?.let { old -> clips = clips.toMutableList().also { it[selectedClip] = old.copy(sourceStartMs = v.toLong().coerceAtMost(old.sourceEndMs - 250L)) } } }, valueRange = 0f..maxDuration)
                 Text("Out: " + (activeClip?.let { clock(it.sourceEndMs) } ?: "--"))
                 Slider(value = (activeClip?.sourceEndMs ?: duration).toFloat().coerceIn(0f, maxDuration), onValueChange = { v -> activeClip?.let { old -> clips = clips.toMutableList().also { it[selectedClip] = old.copy(sourceEndMs = v.toLong().coerceAtLeast(old.sourceStartMs + 250L)) }.resequence() } }, valueRange = 0f..maxDuration)
                 TimelineLane("SUBTITLES", subtitleFile?.name ?: "No SRT loaded", trimStart.toLong(), trimEnd.toLong(), duration)
@@ -401,7 +403,7 @@ object VideoEditor {
                     val item = MediaItem.Builder().setUri(Uri.fromFile(source)).setClippingConfiguration(clipping).build()
                     val audioProcessors = listOf(GainProcessor(object : GainProcessor.GainProvider {
                         override fun getGainFactorAtSamplePosition(samplePosition: Long, sampleRate: Int): Float = audioMix.originalVolume.coerceIn(0f, 2f)
-                        override fun isUnityUntil(samplePosition: Long, sampleRate: Int): Long = if (audioMix.originalVolume == 1f) Long.MAX_VALUE else samplePosition
+                        override fun isUnityUntil(samplePosition: Long, sampleRate: Int): Long = if (audioMix.originalVolume == 1f) Long.MAX_VALUE else C.TIME_UNSET
                     }))
                     videoItems.add(EditedMediaItem.Builder(item).setEffects(Effects(audioProcessors, listOf(OverlayEffect(listOf(overlays))))).build())
                     timelineCursor = clip.timelineStartMs + clip.sourceEndMs - clip.sourceStartMs
@@ -421,7 +423,7 @@ object VideoEditor {
                             }
                             return gain
                         }
-                        override fun isUnityUntil(samplePosition: Long, sampleRate: Int): Long = samplePosition
+                        override fun isUnityUntil(samplePosition: Long, sampleRate: Int): Long = C.TIME_UNSET
                     })
                     val audioItem = EditedMediaItem.Builder(MediaItem.fromUri(Uri.fromFile(music)))
                         .setEffects(Effects(listOf(musicGain), emptyList())).build()
@@ -474,12 +476,14 @@ object VideoEditor {
     }
 }
 
-private fun reorderClips(items: List<TimelineClip>, from: Int, to: Int): List<TimelineClip> =
-    items.toMutableList().also { val moved = it.removeAt(from); it.add(to, moved) }.resequence()
-
-private fun List<TimelineClip>.resequence(): List<TimelineClip> {
-    var cursor = 0L
-    return map { clip -> clip.copy(timelineStartMs = cursor).also { cursor += clip.sourceEndMs - clip.sourceStartMs } }
+private fun reorderClips(items: List<TimelineClip>, from: Int, to: Int): List<TimelineClip> {
+    if (from !in items.indices || to !in items.indices) return items
+    val result = items.toMutableList()
+    val a = result[from]
+    val b = result[to]
+    result[from] = a.copy(timelineStartMs = b.timelineStartMs)
+    result[to] = b.copy(timelineStartMs = a.timelineStartMs)
+    return result
 }
 
 private fun clock(ms: Long): String {
