@@ -23,7 +23,7 @@ import java.util.concurrent.Executors
 fun VideoEditorDialog(
     video: File, modelReady: Boolean, busy: Boolean, onDismiss: () -> Unit,
     onTranscribe: (File) -> Unit, onTrim: (File, Long, Long) -> Unit,
-    onThumbnail: (File, String) -> Unit, onShare: (File) -> Unit
+    onThumbnail: (File, String, Long) -> Unit, onShare: (File) -> Unit
 ) {
     var duration by remember(video.absolutePath) { mutableLongStateOf(0L) }
     var position by remember(video.absolutePath) { mutableLongStateOf(0L) }
@@ -34,12 +34,12 @@ fun VideoEditorDialog(
     var playing by remember { mutableStateOf(false) }
     val maxDuration = duration.coerceAtLeast(1L).toFloat()
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(Modifier.fillMaxWidth(.96f).fillMaxHeight(.92f), shape = MaterialTheme.shapes.extraLarge, color = Color(0xFF101827)) {
+        Surface(Modifier.fillMaxWidth(.96f).fillMaxHeight(.92f), shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surface) {
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column(Modifier.weight(1f)) {
-                        Text("ClipForge editor", style = MaterialTheme.typography.titleLarge, color = Color.White)
-                        Text(video.name, style = MaterialTheme.typography.labelSmall, color = Color(0xFF9AA8BC))
+                        Text("ClipForge editor", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
+                        Text(video.name, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     TextButton(onClick = onDismiss) { Text("Close") }
                 }
@@ -68,7 +68,7 @@ fun VideoEditorDialog(
                 }
                 Text("Position: ${clock(position)} / ${clock(duration)}", color = Color(0xFF9AA8BC))
                 Slider(value = position.coerceIn(0L, duration.coerceAtLeast(1L)).toFloat(), onValueChange = { position = it.toLong(); player?.seekTo(position.toInt()) }, valueRange = 0f..maxDuration)
-                HorizontalDivider(color = Color(0xFF34445A))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Text("Trim / cut", color = Color.White, style = MaterialTheme.typography.titleMedium)
                 Text("Start: ${clock(trimStart.toLong())}", color = Color(0xFF9AA8BC))
                 Slider(value = trimStart.coerceIn(0f, maxDuration), onValueChange = { trimStart = it.coerceAtMost((trimEnd - 500f).coerceAtLeast(0f)); player?.seekTo(trimStart.toInt()) }, valueRange = 0f..maxDuration)
@@ -83,7 +83,7 @@ fun VideoEditorDialog(
                 HorizontalDivider(color = Color(0xFF34445A))
                 Text("Thumbnail maker", color = Color.White, style = MaterialTheme.typography.titleMedium)
                 OutlinedTextField(value = title, onValueChange = { title = it.take(80) }, modifier = Modifier.fillMaxWidth(), label = { Text("Thumbnail title") }, singleLine = true)
-                Button(enabled = duration > 0L && !busy, onClick = { player?.pause(); playing = false; onThumbnail(video, title) }, modifier = Modifier.fillMaxWidth()) { Text("Create 1280 × 720 thumbnail") }
+                Button(enabled = duration > 0L && !busy, onClick = { player?.pause(); playing = false; onThumbnail(video, title, position) }, modifier = Modifier.fillMaxWidth()) { Text("Create 1280 × 720 thumbnail") }
                 Button(onClick = { onShare(video) }, modifier = Modifier.fillMaxWidth()) { Text("Upload / share video…") }
             }
         }
@@ -154,13 +154,13 @@ object VideoEditor {
         }
     }
 
-    fun createThumbnail(video: File, title: String, complete: (Result<File>) -> Unit) {
+    fun createThumbnail(video: File, title: String, positionMs: Long, complete: (Result<File>) -> Unit) {
         executor.execute {
             val result = runCatching {
                 val retriever = MediaMetadataRetriever()
                 try {
                     retriever.setDataSource(video.absolutePath)
-                    val frame = retriever.getFrameAtTime(-1L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC) ?: error("Could not extract a video frame")
+                    val frame = retriever.getFrameAtTime(positionMs.coerceAtLeast(0L) * 1000L, MediaMetadataRetriever.OPTION_CLOSEST) ?: error("Could not extract a video frame")
                     val bitmap = Bitmap.createScaledBitmap(frame, 1280, 720, true)
                     if (bitmap !== frame) frame.recycle()
                     val canvas = Canvas(bitmap)
