@@ -32,11 +32,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-private val Bg = Color(0xFF090D16)
-private val Card = Color(0xFF151E2D)
+private val bg = Color(0xFF090D16)
+private val card = Color(0xFF151E2D)
 private val Cyan = Color(0xFF61E6D2)
 private val Purple = Color(0xFF9B8CFF)
-private val Muted = Color(0xFF9AA8BC)
+private val muted = Color(0xFF9AA8BC)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -165,9 +165,9 @@ private fun ClipForgeApp(activity: MainActivity) {
         refreshRecordings()
     }
 
-    MaterialTheme(colorScheme = darkColorScheme(primary = Cyan, secondary = Purple, background = Bg, surface = Card)) {
+    MaterialTheme(colorScheme = darkColorScheme(primary = Cyan, secondary = Purple, background = bg, surface = card)) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF142238), Bg, Bg))),
+            modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF142238), bg, bg))),
             contentPadding = PaddingValues(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -179,7 +179,7 @@ private fun ClipForgeApp(activity: MainActivity) {
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text("ClipForge", fontSize=25.sp, fontWeight=FontWeight.Bold)
-                        Text("RECORD • TRANSCRIBE • EDIT", color=Muted, fontSize=9.sp, letterSpacing=1.5.sp)
+                        Text("RECORD • TRANSCRIBE • EDIT", color=muted, fontSize=9.sp, letterSpacing=1.5.sp)
                     }
                     Surface(color=Purple.copy(alpha=.15f), shape=RoundedCornerShape(20.dp)) {
                         Text("BETA", color=Purple, fontSize=10.sp, fontWeight=FontWeight.Bold, modifier=Modifier.padding(horizontal=10.dp, vertical=6.dp))
@@ -192,7 +192,7 @@ private fun ClipForgeApp(activity: MainActivity) {
                     Spacer(Modifier.height(12.dp))
                     Text(if (isRecording) "Capture in progress" else "Capture streams and gameplay", fontSize=22.sp, fontWeight=FontWeight.Bold)
                     Spacer(Modifier.height(6.dp))
-                    Text("1080p and 60 FPS are requested when supported by your display and hardware encoder.", color=Muted, fontSize=12.sp, lineHeight=18.sp)
+                    Text("1080p and 60 FPS are requested when supported by your display and hardware encoder.", color=muted, fontSize=12.sp, lineHeight=18.sp)
                     Spacer(Modifier.height(18.dp))
                     Row(horizontalArrangement=Arrangement.spacedBy(10.dp)) {
                         Button(onClick={
@@ -211,30 +211,30 @@ private fun ClipForgeApp(activity: MainActivity) {
                                 isRecording=false
                                 status="Stop requested. Your video is being finalized."
                             }
-                        }, modifier=Modifier.weight(1f).height(52.dp), colors=ButtonDefaults.buttonColors(containerColor=if(isRecording) Color(0xFFB84D5B) else Cyan, contentColor=Bg), shape=RoundedCornerShape(15.dp)) {
+                        }, modifier=Modifier.weight(1f).height(52.dp), colors=ButtonDefaults.buttonColors(containerColor=if(isRecording) Color(0xFFB84D5B) else Cyan, contentColor=bg), shape=RoundedCornerShape(15.dp)) {
                             Icon(if(isRecording) Icons.Rounded.Stop else Icons.Rounded.FiberManualRecord, null)
                             Spacer(Modifier.width(8.dp)); Text(if(isRecording) "Stop recording" else "Start recording", fontWeight=FontWeight.Bold)
                         }
                     }
                     Spacer(Modifier.height(10.dp))
-                    Text(status, color=Muted, fontSize=11.sp)
+                    Text(status, color=muted, fontSize=11.sp)
                 }
             }
             item {
                 SectionTitle("Recording quality", "CAPTURE")
-                Column(Modifier.fillMaxWidth().background(Card, RoundedCornerShape(20.dp)).padding(16.dp), verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                    Text("Resolution", color=Muted, fontSize=12.sp)
+                Column(Modifier.fillMaxWidth().background(card, RoundedCornerShape(20.dp)).padding(16.dp), verticalArrangement=Arrangement.spacedBy(12.dp)) {
+                    Text("Resolution", color=muted, fontSize=12.sp)
                     Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                         listOf("720p","1080p").forEach { v -> FilterChip(selected=quality==v,onClick={quality=v},label={Text(v)}) }
                     }
-                    Text("Frame rate", color=Muted, fontSize=12.sp)
+                    Text("Frame rate", color=muted, fontSize=12.sp)
                     Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                         listOf(30,60).forEach { v -> FilterChip(selected=fps==v,onClick={fps=v},label={Text("$v FPS")}) }
                     }
                     Row(verticalAlignment=Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("Microphone audio", fontSize=13.sp, fontWeight=FontWeight.SemiBold)
-                            Text("Record nearby voice from the microphone.", color=Muted, fontSize=10.sp)
+                            Text("Record nearby voice from the microphone.", color=muted, fontSize=10.sp)
                         }
                         Switch(checked=microphoneEnabled, onCheckedChange={ enabled ->
                             if (enabled) microphonePermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
@@ -244,7 +244,7 @@ private fun ClipForgeApp(activity: MainActivity) {
                     Row(verticalAlignment=Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("App playback audio", fontSize=13.sp, fontWeight=FontWeight.SemiBold)
-                            Text("Android 10+. Captured audio is added to the MP4 after recording; some apps block capture.", color=Muted, fontSize=10.sp)
+                            Text("Android 10+. Captured audio is added to the MP4 after recording; some apps block capture.", color=muted, fontSize=10.sp)
                         }
                         Switch(checked=playbackAudioEnabled, onCheckedChange={ enabled ->
                             if (enabled && Build.VERSION.SDK_INT < 29) {
@@ -255,19 +255,19 @@ private fun ClipForgeApp(activity: MainActivity) {
                         })
                     }
                     if (microphoneEnabled && playbackAudioEnabled) {
-                        Text("Microphone and captured app audio are saved as separate MP4 audio tracks, not mixed together.", color=Muted, fontSize=10.sp, lineHeight=14.sp)
+                        Text("Microphone and captured app audio are saved as separate MP4 audio tracks, not mixed together.", color=muted, fontSize=10.sp, lineHeight=14.sp)
                     }
                 }
             }
             item {
                 SectionTitle("Automatic subtitles", "AI TRANSCRIPTION")
-                Column(Modifier.fillMaxWidth().background(Card, RoundedCornerShape(20.dp)).padding(16.dp), verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.fillMaxWidth().background(card, RoundedCornerShape(20.dp)).padding(16.dp), verticalArrangement=Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment=Alignment.CenterVertically) {
                         Icon(Icons.Rounded.ClosedCaption, tint=Cyan, contentDescription=null, modifier=Modifier.size(26.dp))
                         Spacer(Modifier.width(10.dp))
                         Text("Offline English transcription", fontWeight=FontWeight.SemiBold)
                     }
-                    Text("Download the small Vosk English model once. After installation, saved recordings can be transcribed on-device without sending audio to a server. The first version exports timestamped SRT subtitles.", color=Muted, fontSize=11.sp, lineHeight=17.sp)
+                    Text("Download the small Vosk English model once. After installation, saved recordings can be transcribed on-device without sending audio to a server. The first version exports timestamped SRT subtitles.", color=muted, fontSize=11.sp, lineHeight=17.sp)
                     Row(verticalAlignment=Alignment.CenterVertically, horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                         Button(enabled=!asrBusy && !modelReady, onClick={
                             asrBusy=true
@@ -280,28 +280,28 @@ private fun ClipForgeApp(activity: MainActivity) {
                         }) { Text(if (modelReady) "Model installed" else if (asrBusy) "Please wait..." else "Download English model") }
                         if (modelReady) Icon(Icons.Rounded.CheckCircle, contentDescription="Model installed", tint=Cyan)
                     }
-                    Text(asrStatus, color=if (modelReady) Cyan else Muted, fontSize=10.sp, lineHeight=15.sp)
+                    Text(asrStatus, color=if (modelReady) Cyan else muted, fontSize=10.sp, lineHeight=15.sp)
                 }
             }
             item {
                 SectionTitle("Video editor", "EDIT • CAPTION • THUMBNAIL")
-                Column(Modifier.fillMaxWidth().background(Card, RoundedCornerShape(20.dp)).padding(16.dp), verticalArrangement=Arrangement.spacedBy(10.dp)) {
-                    Text("Import a video or choose one from your library. Play it here, trim a section, generate English subtitles, create a thumbnail and share the finished video.", color=Muted, fontSize=11.sp, lineHeight=17.sp)
+                Column(Modifier.fillMaxWidth().background(card, RoundedCornerShape(20.dp)).padding(16.dp), verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                    Text("Import a video or choose one from your library. Play it here, trim a section, generate English subtitles, create a thumbnail and share the finished video.", color=muted, fontSize=11.sp, lineHeight=17.sp)
                     Button(onClick={ videoImportLauncher.launch(arrayOf("video/mp4", "video/*")) }, modifier=Modifier.fillMaxWidth()) {
                         Icon(Icons.Rounded.FileOpen, null); Spacer(Modifier.width(8.dp)); Text("Import video to ClipForge")
                     }
-                    Text("Editing and subtitle generation happen on this device. You can share the exported MP4 to YouTube or another app using Android's upload/share chooser.", color=Muted, fontSize=10.sp, lineHeight=15.sp)
+                    Text("Editing and subtitle generation happen on this device. You can share the exported MP4 to YouTube or another app using Android's upload/share chooser.", color=muted, fontSize=10.sp, lineHeight=15.sp)
                 }
             }
             item {
                 SectionTitle("Saved recordings", "LIBRARY")
-                Column(Modifier.fillMaxWidth().background(Card, RoundedCornerShape(20.dp)).padding(16.dp), verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.fillMaxWidth().background(card, RoundedCornerShape(20.dp)).padding(16.dp), verticalArrangement=Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment=Alignment.CenterVertically) {
-                        Text(recordings.size.toString() + " video file(s)", color=Muted, fontSize=11.sp, modifier=Modifier.weight(1f))
+                        Text(recordings.size.toString() + " video file(s)", color=muted, fontSize=11.sp, modifier=Modifier.weight(1f))
                         TextButton(onClick={ refreshRecordings() }) { Icon(Icons.Rounded.Refresh, null); Spacer(Modifier.width(4.dp)); Text("Refresh") }
                     }
                     if (recordings.isEmpty()) {
-                        Text("No recordings yet. Start a screen capture to create your first MP4.", color=Muted, fontSize=11.sp)
+                        Text("No recordings yet. Start a screen capture to create your first MP4.", color=muted, fontSize=11.sp)
                     } else {
                         recordings.forEach { file ->
                             Row(verticalAlignment=Alignment.CenterVertically, modifier=Modifier.fillMaxWidth()) {
@@ -309,7 +309,7 @@ private fun ClipForgeApp(activity: MainActivity) {
                                 Spacer(Modifier.width(10.dp))
                                 Column(Modifier.weight(1f)) {
                                     Text(file.name, fontWeight=FontWeight.SemiBold, fontSize=12.sp)
-                                    Text(android.text.format.Formatter.formatShortFileSize(activity, file.length()) + " • " + java.text.SimpleDateFormat("MMM d, yyyy  h:mm a", java.util.Locale.getDefault()).format(java.util.Date(file.lastModified())), color=Muted, fontSize=10.sp)
+                                    Text(android.text.format.Formatter.formatShortFileSize(activity, file.length()) + " • " + java.text.SimpleDateFormat("MMM d, yyyy  h:mm a", java.util.Locale.getDefault()).format(java.util.Date(file.lastModified())), color=muted, fontSize=10.sp)
                                 }
                                 IconButton(onClick = { editingVideo = file }) { Icon(Icons.Rounded.PlayArrow, contentDescription="Play and edit video", tint=Cyan) }
                                 val playbackAudio = File(file.parentFile, file.nameWithoutExtension + "_audio.wav")
@@ -330,7 +330,7 @@ private fun ClipForgeApp(activity: MainActivity) {
                                         result.onSuccess { subtitle -> asrStatus="SRT created: " + subtitle.name }
                                             .onFailure { asrStatus="Transcription failed: " + (it.message ?: "unknown error") }
                                     }
-                                }) { Text("SRT", color=if(modelReady && !asrBusy) Cyan else Muted, fontSize=11.sp) }
+                                }) { Text("SRT", color=if(modelReady && !asrBusy) Cyan else muted, fontSize=11.sp) }
                                 if (File(file.parentFile, file.nameWithoutExtension + ".srt").exists()) {
                                     IconButton(onClick={
                                         val subtitle = File(file.parentFile, file.nameWithoutExtension + ".srt")
@@ -341,7 +341,7 @@ private fun ClipForgeApp(activity: MainActivity) {
                                 TextButton(onClick={
                                     subtitleImportTarget = file
                                     subtitleImportLauncher.launch(arrayOf("application/x-subrip", "text/plain", "application/octet-stream"))
-                                }) { Text("Import SRT", color=Muted, fontSize=10.sp) }
+                                }) { Text("Import SRT", color=muted, fontSize=10.sp) }
                                 val subtitleFile = File(file.parentFile, file.nameWithoutExtension + ".srt")
                                 if (subtitleFile.exists()) {
                                     IconButton(onClick={
@@ -376,11 +376,11 @@ private fun ClipForgeApp(activity: MainActivity) {
                             }
                         }
                     }
-                    Text("Original MP4s stay in app storage. When an internal-audio WAV sidecar exists, SRT transcription uses that captured app audio first; otherwise it uses an audio track in the MP4.", color=Muted, fontSize=10.sp, lineHeight=15.sp)
+                    Text("Original MP4s stay in app storage. When an internal-audio WAV sidecar exists, SRT transcription uses that captured app audio first; otherwise it uses an audio track in the MP4.", color=muted, fontSize=10.sp, lineHeight=15.sp)
                 }
             }
             item {
-                Text("Capture depends on Android MediaProjection approval. Some streaming apps block playback-audio capture. Screen recording is not guaranteed to sustain 1080p at 60 FPS on every device.", color=Muted, fontSize=10.sp, lineHeight=15.sp)
+                Text("Capture depends on Android MediaProjection approval. Some streaming apps block playback-audio capture. Screen recording is not guaranteed to sustain 1080p at 60 FPS on every device.", color=muted, fontSize=10.sp, lineHeight=15.sp)
             }
         }
         if (editingVideo != null) {
@@ -490,6 +490,6 @@ private fun validateSrt(content: String) {
     Row(verticalAlignment=Alignment.CenterVertically) {
         Icon(icon,null,tint=Cyan,modifier=Modifier.size(22.dp))
         Spacer(Modifier.width(12.dp))
-        Column { Text(title,fontWeight=FontWeight.SemiBold,fontSize=13.sp); Text(detail,color=Muted,fontSize=10.sp) }
+        Column { Text(title,fontWeight=FontWeight.SemiBold,fontSize=13.sp); Text(detail,color=muted,fontSize=10.sp) }
     }
 }
