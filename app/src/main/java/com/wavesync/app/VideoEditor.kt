@@ -2,6 +2,7 @@ package com.wavesync.app
 
 import android.media.*
 import android.graphics.*
+import android.graphics.Color as AndroidColor
 import android.view.ViewGroup
 import android.widget.VideoView
 import androidx.compose.foundation.layout.*
@@ -52,7 +53,7 @@ fun VideoEditorDialog(
                     }
                 }, update = { player = it })
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(Modifier.weight(1f), onClick = {
+                    Button(onClick = {
                         val view = player ?: return@Button
                         if (view.isPlaying) { view.pause(); playing = false } else { view.start(); playing = true }
                     }) { Text(if (playing) "Pause" else "Play") }
