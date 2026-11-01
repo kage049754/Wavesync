@@ -444,10 +444,10 @@ private fun ClipForgeApp(activity: MainActivity) {
                         }.onFailure { asrStatus = "Transcription failed: " + (it.message ?: "unknown error") }
                     }
                 },
-                onTrim = { video, startMs, endMs, music, subtitles, subtitleStyle, overlayText ->
+                onTrim = { video, clips, music, subtitles, subtitleStyle, overlayText, imageOverlay, audioMix ->
                     asrBusy = true
                     status = "Rendering edited MP4 with re-encoded video..."
-                    VideoEditor.export(activity, video, startMs, endMs, music, subtitles, subtitleStyle, overlayText) { result ->
+                    VideoEditor.export(activity, video, clips, music, subtitles, subtitleStyle, overlayText, imageOverlay, audioMix) { result ->
                         asrBusy = false
                         result.onSuccess { edited ->
                             status = "Edited video exported: " + edited.name
