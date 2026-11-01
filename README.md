@@ -28,9 +28,9 @@ ClipForge is designed for recording streams and gameplay, generating English sub
 - Files saved under the app-specific Movies/ClipForge directory.
 - Built-in video playback and a basic editor screen; recordings no longer need to open in a separate player.
 - Import MP4 or other supported video files into the ClipForge library.
-- Basic lossless trim export using MediaExtractor/MediaMuxer; the selected start may move back to the nearest keyframe.
+- Re-encoded MP4 trim export through Media3 Transformer using the selected clip in/out points; frame accuracy and codec behavior still require physical-device verification.
 - Thumbnail generator creates a 1280 × 720 JPEG using a frame from the video and a user-supplied title.
-- Android share/upload chooser for sending a video to YouTube or other installed destinations; this is not direct YouTube account/API upload.
+- Android share chooser for sending a video to YouTube or other installed destinations; direct YouTube account authorization and API upload are not implemented.
 - Recordings can be copied to the public `Movies/ClipForge` gallery folder through Android MediaStore.
 - H.264 encoder capability checks select a supported resolution/frame-rate fallback when the requested combination is unavailable.
 - Offline English speech recognition using the Vosk Android engine.
@@ -38,7 +38,24 @@ ClipForge is designed for recording streams and gameplay, generating English sub
 - Post-recording transcription prefers the captured internal-playback WAV sidecar when present, converts 44.1 kHz stereo PCM to 16 kHz mono locally, and generates timestamped SRT subtitles adjusted by the recorded audio-start offset; otherwise it decodes an audio track from the MP4.
 - SRT import for existing subtitle files and sharing/export of generated or edited SRT files.
 - Basic SRT text/timestamp editor with cue-number, timestamp-format, and start/end validation before saving.
-- Initial UI for the subtitle and editor workflow.
+- Subtitle customization for font family, font size, text/outline colors, outline thickness, and cue-edge fade/pop/shrink effects.
+- Styled SRT captions and a basic text overlay are rendered into the exported video with Media3 CanvasOverlay.
+- Optional looping music sequence can be added to the export composition; source/music balance and real-device playback need verification.
+- Editor timeline currently displays VIDEO, SUBTITLES, OVERLAY and MUSIC lanes, but they are visual summaries rather than independently movable/editable clips.
+
+## Editor feature status
+
+| Feature | Status |
+|---|---|
+| Frame-accurate re-encoding | Implemented in the export pipeline; device verification pending |
+| Burned-in styled subtitles | Implemented |
+| Subtitle customization | Implemented |
+| Editable multi-track timeline | Partial: lanes display, independent clip positioning/splitting/reordering not implemented |
+| Video overlays | Basic text overlay only; image overlays and positioning/size controls not implemented |
+| Music mixing | Basic optional looping music sequence; per-track gain, fades and verified mixing controls not implemented |
+| Direct YouTube account integration | Not implemented; Android share chooser remains |
+
+Direct YouTube upload will require a Google Cloud project, YouTube Data API v3 enabled, and an Android OAuth client configured for this app's package and signing certificate. No OAuth client ID or credentials are embedded in the repository.
 
 ## Roadmap
 - [x] Initial internal playback audio capture using Android AudioPlaybackCapture where permitted; save a separate WAV sidecar.
@@ -49,7 +66,11 @@ ClipForge is designed for recording streams and gameplay, generating English sub
 - [ ] Visual subtitle styling and on-video preview.
 - [x] Built-in playback and basic trim export.
 - [x] Import video, generate local English SRT subtitles, create a basic thumbnail and share/upload through Android chooser.
-- [ ] Full multi-track timeline, frame-accurate re-encoded cuts, visual subtitle burn-in/styling, overlays, outro and audio mix.
+- [x] Re-encoded trim export, styled subtitle burn-in, subtitle design controls, basic text overlay and optional music sequence.
+- [ ] Editable multi-clip timeline with independent track positioning, split, reorder and per-track timing.
+- [ ] Image overlays plus position/scale/opacity controls and overlay timing.
+- [ ] Music/source-audio gain, fades and reliable audio-mix verification across devices.
+- [ ] Direct YouTube OAuth authorization and resumable YouTube Data API upload.
 - [ ] Export presets and device capability detection.
 
 ## Compatibility and privacy
