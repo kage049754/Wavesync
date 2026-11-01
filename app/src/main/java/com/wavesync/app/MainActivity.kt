@@ -418,8 +418,9 @@ private fun ClipForgeApp(activity: MainActivity) {
                         Text("Videos and sidecar files stay in ClipForge's app-specific Movies folder. Nothing uploads automatically. Transcription runs on-device after the English model is downloaded.", color = muted, fontSize = 12.sp, lineHeight = 18.sp)
                         HorizontalDivider()
                         Text("EDITOR STATUS", color = MaterialTheme.colorScheme.primary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        Text("Trim remains fast keyframe-based sample copying. SRT files are not burned into video yet. Thumbnails now use the selected playback frame with a title overlay. Upload opens Android's share chooser; direct YouTube account integration is not available.", color = muted, fontSize = 12.sp, lineHeight = 18.sp)
-                        Text("Frame-accurate re-encoding, styled burned-in captions, a full multi-track timeline, video overlays and music mixing remain planned work.", color = muted, fontSize = 12.sp, lineHeight = 18.sp)
+                        Text("The editor re-encodes the selected trim range, burns styled SRT captions and a basic text overlay into the exported MP4, and supports an optional looping music track. Subtitle font, size, colors, outline and cue-edge animations are adjustable.", color = muted, fontSize = 12.sp, lineHeight = 18.sp)
+                        Text("Timeline limitation: the current lanes are visual summaries, not independently movable clips. Image overlays, overlay positioning and size controls, per-track volume/fades, and clip split/reorder are not yet available. Audio mix behavior needs device testing.", color = muted, fontSize = 12.sp, lineHeight = 18.sp)
+                        Text("YouTube: Android share chooser only. Direct account authorization and API upload are not implemented; Google Cloud OAuth setup will be required.", color = muted, fontSize = 12.sp, lineHeight = 18.sp)
                         Text("ClipForge • Version 1.1.0", color = muted, fontSize = 11.sp)
                     }
                 },
