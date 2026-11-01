@@ -24,6 +24,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.C
+import androidx.media3.common.audio.GainProcessor
+import androidx.media3.common.audio.DefaultGainProvider
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.CanvasOverlay
 import androidx.media3.effect.OverlayEffect
@@ -157,6 +160,23 @@ fun VideoEditorDialog(
                     TextButton(onClick = { clips = listOf(TimelineClip(System.nanoTime(), 0L, duration, 0L)); selectedClip = 0 }) { Text("Reset") }
                 }
                 val activeClip = clips.getOrNull(selectedClip)
+                Text("Timeline placement")
+                Text("Selected clip starts at: " + (activeClip?.let { clock(it.timelineStartMs) } ?: "--"))
+                Slider(
+                    value = (activeClip?.timelineStartMs ?: 0L).toFloat().coerceIn(0f, (duration * 3L).coerceAtLeast(1000L).toFloat()),
+                    onValueChange = { v ->
+                        activeClip?.let { selected ->
+                            val proposed = v.toLong()
+                            val previousEnd = clips.filter { it.id != selected.id && it.timelineStartMs + (it.sourceEndMs - it.sourceStartMs) <= selected.timelineStartMs }.maxOfOrNull { it.timelineStartMs + it.sourceEndMs - it.sourceStartMs } ?: 0L
+                            val nextStart = clips.filter { it.id != selected.id && it.timelineStartMs >= selected.timelineStartMs }.minOfOrNull { it.timelineStartMs } ?: Long.MAX_VALUE
+                            val maxStart = if (nextStart == Long.MAX_VALUE) duration * 3L else (nextStart - (selected.sourceEndMs - selected.sourceStartMs)).coerceAtLeast(previousEnd)
+                            val safeStart = proposed.coerceIn(previousEnd, maxStart.coerceAtLeast(previousEnd))
+                            clips = clips.map { if (it.id == selected.id) it.copy(timelineStartMs = safeStart) else it }
+                        }
+                    },
+                    valueRange = 0f..(duration * 3L).coerceAtLeast(1000L).toFloat()
+                )
+                Text("Clips can be moved into gaps; overlapping clips are prevented in this single-video track.")
                 Text("Trim selected clip")
                 Text("In: " + (activeClip?.let { clock(it.sourceStartMs) } ?: "--"))
                 Slider(value = (activeClip?.sourceStartMs ?: 0L).toFloat().coerceIn(0f, maxDuration), onValueChange = { v -> activeClip?.let { old -> clips = clips.toMutableList().also { it[selectedClip] = old.copy(sourceStartMs = v.toLong().coerceAtMost(old.sourceEndMs - 250L)) }.resequence() } }, valueRange = 0f..maxDuration)
@@ -360,14 +380,51 @@ object VideoEditor {
             val result = runCatching {
                 require(source.isFile && clips.isNotEmpty() && clips.all { it.sourceEndMs > it.sourceStartMs }) { "Invalid clip timeline" }
                 val overlays = CaptionOverlay(parseSrt(subtitles), style, overlayText, imageOverlay)
-                val videoItems = clips.map { clip ->
+                val orderedClips = clips.sortedBy { it.timelineStartMs }
+                var timelineCursor = 0L
+                val videoItems = ArrayList<EditedMediaItem>()
+                val blackFrame = File(source.parentFile, source.nameWithoutExtension + "_timeline_gap.png")
+                if (!blackFrame.exists()) {
+                    val bitmap = android.graphics.Bitmap.createBitmap(16, 16, android.graphics.Bitmap.Config.ARGB_8888)
+                    bitmap.eraseColor(android.graphics.Color.BLACK)
+                    blackFrame.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+                    bitmap.recycle()
+                }
+                orderedClips.forEach { clip ->
+                    require(clip.timelineStartMs >= timelineCursor) { "Timeline clips cannot overlap. Move clips apart before exporting." }
+                    val gapMs = clip.timelineStartMs - timelineCursor
+                    if (gapMs > 0L) {
+                        val gapMedia = MediaItem.Builder().setUri(Uri.fromFile(blackFrame)).setImageDurationMs(gapMs).build()
+                        videoItems.add(EditedMediaItem.Builder(gapMedia).setFrameRate(30).setRemoveAudio(true).build())
+                    }
                     val clipping = MediaItem.ClippingConfiguration.Builder().setStartPositionMs(clip.sourceStartMs).setEndPositionMs(clip.sourceEndMs).build()
                     val item = MediaItem.Builder().setUri(Uri.fromFile(source)).setClippingConfiguration(clipping).build()
-                    EditedMediaItem.Builder(item).setEffects(Effects(emptyList(), listOf(OverlayEffect(listOf(overlays))))).build()
+                    val audioProcessors = listOf(GainProcessor(object : GainProcessor.GainProvider {
+                        override fun getGainFactorAtSamplePosition(samplePosition: Long, sampleRate: Int): Float = audioMix.originalVolume.coerceIn(0f, 2f)
+                        override fun isUnityUntil(samplePosition: Long, sampleRate: Int): Long = if (audioMix.originalVolume == 1f) Long.MAX_VALUE else samplePosition
+                    }))
+                    videoItems.add(EditedMediaItem.Builder(item).setEffects(Effects(audioProcessors, listOf(OverlayEffect(listOf(overlays))))).build())
+                    timelineCursor = clip.timelineStartMs + clip.sourceEndMs - clip.sourceStartMs
                 }
+                require(videoItems.isNotEmpty()) { "Timeline is empty" }
                 val videoSequence = EditedMediaItemSequence.withAudioAndVideoFrom(videoItems)
                 val composition = if (music != null && music.isFile) {
-                    val audioItem = EditedMediaItem.Builder(MediaItem.fromUri(Uri.fromFile(music))).build()
+                    val totalDurationMs = timelineCursor
+                    val musicGain = GainProcessor(object : GainProcessor.GainProvider {
+                        override fun getGainFactorAtSamplePosition(samplePosition: Long, sampleRate: Int): Float {
+                            val tMs = samplePosition * 1000L / sampleRate
+                            var gain = audioMix.musicVolume.coerceIn(0f, 2f)
+                            if (audioMix.fadeInMs > 0L) gain *= (tMs.toFloat() / audioMix.fadeInMs).coerceIn(0f, 1f)
+                            if (audioMix.fadeOutMs > 0L) {
+                                val fadeStart = (totalDurationMs - audioMix.fadeOutMs).coerceAtLeast(0L)
+                                if (tMs >= fadeStart) gain *= ((totalDurationMs - tMs).toFloat() / audioMix.fadeOutMs).coerceIn(0f, 1f)
+                            }
+                            return gain
+                        }
+                        override fun isUnityUntil(samplePosition: Long, sampleRate: Int): Long = samplePosition
+                    })
+                    val audioItem = EditedMediaItem.Builder(MediaItem.fromUri(Uri.fromFile(music)))
+                        .setEffects(Effects(listOf(musicGain), emptyList())).build()
                     val audioSequence = EditedMediaItemSequence.withAudioFrom(listOf(audioItem)).buildUpon().setIsLooping(true).build()
                     Composition.Builder(videoSequence, audioSequence).build()
                 } else Composition.Builder(videoSequence).build()
