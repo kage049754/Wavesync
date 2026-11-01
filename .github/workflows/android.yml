@@ -21,6 +21,8 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - name: Print debug signing certificate SHA-1 for Google OAuth setup
+        run: gradle --no-daemon :app:signingReport
       - name: Build debug APK
         run: gradle --no-daemon :app:assembleDebug
       - name: Upload APK
