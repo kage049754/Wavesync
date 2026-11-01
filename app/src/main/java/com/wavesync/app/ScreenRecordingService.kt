@@ -28,6 +28,13 @@ import android.os.SystemClock
 import android.util.DisplayMetrics
 import android.view.Surface
 import android.view.WindowManager
+import android.view.Gravity
+import android.view.MotionEvent
+import android.graphics.PixelFormat
+import android.graphics.Color as AndroidColor
+import android.widget.LinearLayout
+import android.widget.TextView
+import android.view.View
 import java.io.File
 import java.io.RandomAccessFile
 import java.text.SimpleDateFormat
@@ -40,6 +47,10 @@ class ScreenRecordingService : Service() {
     private var display: VirtualDisplay? = null
     private var outputFile: File? = null
     private var stopping = false
+    private var paused = false
+    private var overlayManager: WindowManager? = null
+    private var overlayView: View? = null
+    private var overlayExpanded = true
     private var playbackRecord: AudioRecord? = null
     private var playbackThread: Thread? = null
     private var playbackFile: File? = null
@@ -53,6 +64,8 @@ class ScreenRecordingService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> { stopRecording(); return START_NOT_STICKY }
+            ACTION_PAUSE -> { pauseRecording(); return START_NOT_STICKY }
+            ACTION_RESUME -> { resumeRecording(); return START_NOT_STICKY }
             ACTION_START -> {
                 startForegroundCompat()
                 val code = intent.getIntExtra(EXTRA_RESULT_CODE, 0)
@@ -84,6 +97,7 @@ class ScreenRecordingService : Service() {
 
     private fun beginRecording(code:Int,data:Intent,fps:Int,quality:String,microphone:Boolean,playbackAudio:Boolean) {
         stopping = false
+        paused = false
         playbackFile = null
         playbackAudioOffsetUs = 0L
         getSharedPreferences("clipforge", Context.MODE_PRIVATE).edit()
@@ -129,7 +143,122 @@ class ScreenRecordingService : Service() {
             if (Build.VERSION.SDK_INT >= 29) startPlaybackCapture(projection ?: error("Screen projection was not initialized"), outputFile ?: error("Recording file was not created"))
             else getSharedPreferences("clipforge", Context.MODE_PRIVATE).edit().putString("last_error", "App audio capture requires Android 10 or newer").apply()
         }
-        getSharedPreferences("clipforge",Context.MODE_PRIVATE).edit().putString("last_recording",outputFile!!.absolutePath).putString("last_error","").putBoolean("recording_active",true).apply()
+        getSharedPreferences("clipforge",Context.MODE_PRIVATE).edit().putString("last_recording",outputFile!!.absolutePath).putString("last_error","").putBoolean("recording_active",true).putBoolean("recording_paused",false).apply()
+        showFloatingControls()
+    }
+
+    private fun showFloatingControls() {
+        if (Build.VERSION.SDK_INT < 23 || !android.provider.Settings.canDrawOverlays(this)) return
+        val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        overlayManager = wm
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(14, 10, 14, 10)
+            setBackgroundColor(AndroidColor.rgb(18, 29, 47))
+        }
+        val bubble = TextView(this).apply {
+            text = "●  CLIPFORGE"
+            textSize = 13f
+            setTextColor(AndroidColor.rgb(97, 230, 210))
+            setPadding(12, 10, 12, 10)
+            setOnClickListener {
+                overlayExpanded = !overlayExpanded
+                panel.getChildAt(1).visibility = if (overlayExpanded) View.VISIBLE else View.GONE
+                panel.getChildAt(2).visibility = if (overlayExpanded) View.VISIBLE else View.GONE
+            }
+        }
+        val pause = TextView(this).apply {
+            text = "Ⅱ   Pause"
+            textSize = 14f
+            setTextColor(AndroidColor.WHITE)
+            setPadding(12, 12, 12, 12)
+            tag = "pause"
+            setOnClickListener { if (paused) resumeRecording() else pauseRecording() }
+        }
+        val stop = TextView(this).apply {
+            text = "■   Stop and save"
+            textSize = 14f
+            setTextColor(AndroidColor.rgb(255, 125, 135))
+            setPadding(12, 12, 12, 12)
+            setOnClickListener { stopRecording() }
+        }
+        panel.addView(bubble)
+        panel.addView(pause)
+        panel.addView(stop)
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            if (Build.VERSION.SDK_INT >= 26) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT
+        ).apply { gravity = Gravity.TOP or Gravity.END; x = 18; y = 180 }
+        var downX = 0f
+        var downY = 0f
+        var startX = 0
+        var startY = 0
+        bubble.setOnTouchListener { view, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> { downX=event.rawX; downY=event.rawY; startX=params.x; startY=params.y; true }
+                MotionEvent.ACTION_MOVE -> { params.x=startX-(event.rawX-downX).toInt(); params.y=startY+(event.rawY-downY).toInt(); runCatching { wm.updateViewLayout(panel,params) }; true }
+                MotionEvent.ACTION_UP -> { if (kotlin.math.abs(event.rawX-downX)<8 && kotlin.math.abs(event.rawY-downY)<8) view.performClick(); true }
+                else -> false
+            }
+        }
+        overlayView = panel
+        runCatching { wm.addView(panel, params) }.onFailure { overlayView=null; overlayManager=null }
+    }
+
+    private fun updateFloatingPauseLabel() {
+        val panel = overlayView as? LinearLayout ?: return
+        val pause = (0 until panel.childCount).map { panel.getChildAt(it) }.filterIsInstance<TextView>().firstOrNull { it.tag == "pause" }
+        pause?.text = if (paused) "▶   Resume" else "Ⅱ   Pause"
+    }
+
+    private fun removeFloatingControls() {
+        val view = overlayView
+        if (view != null) runCatching { overlayManager?.removeView(view) }
+        overlayView = null
+        overlayManager = null
+    }
+
+    private fun pauseRecording() {
+        if (stopping || paused) return
+        try {
+            if (Build.VERSION.SDK_INT >= 24) {
+                recorder?.pause()
+                paused = true
+                getSharedPreferences("clipforge", Context.MODE_PRIVATE).edit().putBoolean("recording_paused",true).apply()
+                updateFloatingPauseLabel()
+                updateRecordingNotification("Recording paused")
+            }
+        } catch (e: Exception) {
+            getSharedPreferences("clipforge", Context.MODE_PRIVATE).edit().putString("last_error","Pause failed: " + (e.message ?: "unknown error")).apply()
+        }
+    }
+
+    private fun resumeRecording() {
+        if (stopping || !paused) return
+        try {
+            if (Build.VERSION.SDK_INT >= 24) {
+                recorder?.resume()
+                paused = false
+                getSharedPreferences("clipforge", Context.MODE_PRIVATE).edit().putBoolean("recording_paused",false).apply()
+                updateFloatingPauseLabel()
+                updateRecordingNotification("Recording in progress")
+            }
+        } catch (e: Exception) {
+            getSharedPreferences("clipforge", Context.MODE_PRIVATE).edit().putString("last_error","Resume failed: " + (e.message ?: "unknown error")).apply()
+        }
+    }
+
+    private fun updateRecordingNotification(message: String) {
+        val notification = Notification.Builder(this, "clipforge_recording")
+            .setSmallIcon(android.R.drawable.presence_video_online)
+            .setContentTitle("ClipForge")
+            .setContentText(message)
+            .setOngoing(true)
+            .build()
+        runCatching { (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIFICATION_ID, notification) }
     }
 
 
@@ -250,6 +379,8 @@ class ScreenRecordingService : Service() {
     private fun stopRecording() {
         if (stopping) return
         stopping = true
+        removeFloatingControls()
+        paused = false
         stopPlaybackCapture()
         try { recorder?.stop() } catch (_:Exception) {}
         try { display?.release() } catch (_:Exception) {}
@@ -262,6 +393,7 @@ class ScreenRecordingService : Service() {
         getSharedPreferences("clipforge",Context.MODE_PRIVATE).edit()
             .putString("last_recording",saved?.absolutePath ?: "")
             .putBoolean("recording_active",false)
+            .putBoolean("recording_paused",false)
             .putString("last_mux_status", if (saved != null && wav != null) "Finishing MP4 audio..." else "")
             .apply()
         if (saved != null && wav != null) {
@@ -302,6 +434,8 @@ class ScreenRecordingService : Service() {
     companion object {
         const val ACTION_START="com.wavesync.app.START_CAPTURE"
         const val ACTION_STOP="com.wavesync.app.STOP_CAPTURE"
+        const val ACTION_PAUSE="com.wavesync.app.PAUSE_CAPTURE"
+        const val ACTION_RESUME="com.wavesync.app.RESUME_CAPTURE"
         const val EXTRA_RESULT_CODE="result_code"
         const val EXTRA_RESULT_DATA="result_data"
         const val EXTRA_FPS="fps"
