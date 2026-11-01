@@ -60,6 +60,8 @@ private fun ClipForgeApp(activity: MainActivity) {
     var asrBusy by remember { mutableStateOf(false) }
     var asrStatus by remember { mutableStateOf(if (modelReady) "Offline English model is ready" else "Download the 40 MB English model once to enable offline transcription") }
     var editingSubtitle by remember { mutableStateOf<File?>(null) }
+    var editingVideo by remember { mutableStateOf<File?>(null) }
+    var importVideoPending by remember { mutableStateOf(false) }
     var subtitleDraft by remember { mutableStateOf("") }
     var subtitleImportTarget by remember { mutableStateOf<File?>(null) }
     val refreshRecordings = {
@@ -131,6 +133,20 @@ private fun ClipForgeApp(activity: MainActivity) {
     val playbackAudioPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         playbackAudioEnabled = granted
         status = if (granted) "App playback audio enabled for the next recording" else "Audio permission was denied"
+    }
+    val videoImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            runCatching {
+                val folder = File(activity.getExternalFilesDir(Environment.DIRECTORY_MOVIES), "ClipForge").apply { mkdirs() }
+                val imported = File(folder, "Imported_" + System.currentTimeMillis() + ".mp4")
+                activity.contentResolver.openInputStream(uri)?.use { input -> imported.outputStream().use { output -> input.copyTo(output) } }
+                    ?: error("Selected video could not be opened")
+                require(imported.length() > 0L) { "Selected video is empty" }
+                refreshRecordings()
+                editingVideo = imported
+                status = "Video imported into ClipForge. Open its editor to trim, caption, make a thumbnail or share it."
+            }.onFailure { status = "Video import failed: " + (it.message ?: "unknown error") }
+        }
     }
     val subtitleImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         val video = subtitleImportTarget
@@ -268,12 +284,13 @@ private fun ClipForgeApp(activity: MainActivity) {
                 }
             }
             item {
-                SectionTitle("Editor roadmap", "IN DEVELOPMENT")
+                SectionTitle("Video editor", "EDIT • CAPTION • THUMBNAIL")
                 Column(Modifier.fillMaxWidth().background(Card, RoundedCornerShape(20.dp)).padding(16.dp), verticalArrangement=Arrangement.spacedBy(10.dp)) {
-                    EditorFeature(Icons.Rounded.ContentCut,"Trim and split","Planned: cut unwanted sections and create short clips")
-                    EditorFeature(Icons.Rounded.TextFields,"Subtitle styling","Planned: position, font, size, color, outline and animation")
-                    EditorFeature(Icons.Rounded.Movie,"Outro and overlays","Planned: ending cards, images, text and music")
-                    EditorFeature(Icons.Rounded.Subtitles,"Subtitle correction","Available: import, edit, validate and export SRT files")
+                    Text("Import a video or choose one from your library. Play it here, trim a section, generate English subtitles, create a thumbnail and share the finished video.", color=Muted, fontSize=11.sp, lineHeight=17.sp)
+                    Button(onClick={ videoImportLauncher.launch(arrayOf("video/mp4", "video/*")) }, modifier=Modifier.fillMaxWidth()) {
+                        Icon(Icons.Rounded.FileOpen, null); Spacer(Modifier.width(8.dp)); Text("Import video to ClipForge")
+                    }
+                    Text("Editing and subtitle generation happen on this device. You can share the exported MP4 to YouTube or another app using Android's upload/share chooser.", color=Muted, fontSize=10.sp, lineHeight=15.sp)
                 }
             }
             item {
@@ -294,13 +311,7 @@ private fun ClipForgeApp(activity: MainActivity) {
                                     Text(file.name, fontWeight=FontWeight.SemiBold, fontSize=12.sp)
                                     Text(android.text.format.Formatter.formatShortFileSize(activity, file.length()) + " • " + java.text.SimpleDateFormat("MMM d, yyyy  h:mm a", java.util.Locale.getDefault()).format(java.util.Date(file.lastModified())), color=Muted, fontSize=10.sp)
                                 }
-                                IconButton(onClick = {
-                                    runCatching {
-                                        val uri = FileProvider.getUriForFile(activity, activity.packageName + ".fileprovider", file)
-                                        val view = Intent(Intent.ACTION_VIEW).setDataAndType(uri, "video/mp4").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                        activity.startActivity(view)
-                                    }.onFailure { status = "No video player found or file could not be opened" }
-                                }) { Icon(Icons.Rounded.PlayArrow, contentDescription="Play recording", tint=Cyan) }
+                                IconButton(onClick = { editingVideo = file }) { Icon(Icons.Rounded.PlayArrow, contentDescription="Play and edit video", tint=Cyan) }
                                 val playbackAudio = File(file.parentFile, file.nameWithoutExtension + "_audio.wav")
                                 if (playbackAudio.exists() && playbackAudio.length() > 44L) {
                                     IconButton(onClick = {
@@ -371,6 +382,50 @@ private fun ClipForgeApp(activity: MainActivity) {
             item {
                 Text("Capture depends on Android MediaProjection approval. Some streaming apps block playback-audio capture. Screen recording is not guaranteed to sustain 1080p at 60 FPS on every device.", color=Muted, fontSize=10.sp, lineHeight=15.sp)
             }
+        }
+        if (editingVideo != null) {
+            VideoEditorDialog(
+                video = editingVideo!!,
+                modelReady = modelReady,
+                busy = asrBusy,
+                onDismiss = { editingVideo = null },
+                onTranscribe = { video ->
+                    asrBusy = true
+                    asrStatus = "Preparing video audio for automatic subtitles..."
+                    OfflineTranscriber.transcribe(activity, video, { message -> asrStatus = message }) { result ->
+                        asrBusy = false
+                        result.onSuccess { subtitle ->
+                            asrStatus = "Automatic subtitles created: " + subtitle.name
+                            status = "English subtitles generated. Open Edit subtitles in the library to correct the text."
+                            refreshRecordings()
+                        }.onFailure { asrStatus = "Transcription failed: " + (it.message ?: "unknown error") }
+                    }
+                },
+                onTrim = { video, startMs, endMs ->
+                    status = "Exporting trimmed clip..."
+                    VideoEditor.trim(video, startMs, endMs) { result ->
+                        result.onSuccess { trimmed ->
+                            status = "Trimmed clip saved: " + trimmed.name
+                            refreshRecordings()
+                            editingVideo = trimmed
+                        }.onFailure { status = "Trim failed: " + (it.message ?: "unknown error") }
+                    }
+                },
+                onThumbnail = { video, title ->
+                    VideoEditor.createThumbnail(video, title) { result ->
+                        result.onSuccess { status = "Thumbnail saved: " + it.name }
+                            .onFailure { status = "Thumbnail failed: " + (it.message ?: "unknown error") }
+                    }
+                },
+                onShare = { video ->
+                    runCatching {
+                        val uri = FileProvider.getUriForFile(activity, activity.packageName + ".fileprovider", video)
+                        val share = Intent(Intent.ACTION_SEND).setType("video/mp4").putExtra(Intent.EXTRA_STREAM, uri)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        activity.startActivity(Intent.createChooser(share, "Upload or share video"))
+                    }.onFailure { status = "Could not open upload/share chooser: " + (it.message ?: "unknown error") }
+                }
+            )
         }
         if (editingSubtitle != null) {
             AlertDialog(
