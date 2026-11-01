@@ -33,5 +33,6 @@ dependencies {
     implementation("com.alphacephei:vosk-android:0.3.75")
     implementation("androidx.media3:media3-transformer:1.9.0")
     implementation("androidx.media3:media3-effect:1.9.0")
+    implementation("com.google.android.gms:play-services-auth:22.0.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
