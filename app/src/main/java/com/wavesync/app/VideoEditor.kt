@@ -66,22 +66,22 @@ fun VideoEditorDialog(
                         kotlinx.coroutines.delay(250)
                     }
                 }
-                Text("Position: ${clock(position)} / ${clock(duration)}", color = Color(0xFF9AA8BC))
+                Text("Position: ${clock(position)} / ${clock(duration)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Slider(value = position.coerceIn(0L, duration.coerceAtLeast(1L)).toFloat(), onValueChange = { position = it.toLong(); player?.seekTo(position.toInt()) }, valueRange = 0f..maxDuration)
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Text("Trim / cut", color = Color.White, style = MaterialTheme.typography.titleMedium)
-                Text("Start: ${clock(trimStart.toLong())}", color = Color(0xFF9AA8BC))
+                Text("Trim / cut", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+                Text("Start: ${clock(trimStart.toLong())}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Slider(value = trimStart.coerceIn(0f, maxDuration), onValueChange = { trimStart = it.coerceAtMost((trimEnd - 500f).coerceAtLeast(0f)); player?.seekTo(trimStart.toInt()) }, valueRange = 0f..maxDuration)
-                Text("End: ${clock(trimEnd.toLong())}", color = Color(0xFF9AA8BC))
+                Text("End: ${clock(trimEnd.toLong())}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Slider(value = trimEnd.coerceIn(0f, maxDuration), onValueChange = { trimEnd = it.coerceAtLeast(trimStart + 500f).coerceAtMost(maxDuration); player?.seekTo(trimEnd.toInt()) }, valueRange = 0f..maxDuration)
-                Text("Fast export copies the selected media without re-encoding. The start can move back to the nearest keyframe.", color = Color(0xFF9AA8BC), style = MaterialTheme.typography.bodySmall)
+                Text("Fast export copies the selected media without re-encoding. The start can move back to the nearest keyframe.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 Button(enabled = duration > 0L && trimEnd - trimStart >= 500f && !busy, onClick = { player?.pause(); playing = false; onTrim(video, trimStart.toLong(), trimEnd.toLong()) }, modifier = Modifier.fillMaxWidth()) { Text("Export trimmed MP4") }
-                HorizontalDivider(color = Color(0xFF34445A))
-                Text("Automatic English subtitles", color = Color.White, style = MaterialTheme.typography.titleMedium)
-                Text(if (modelReady) "Generate timestamped SRT subtitles locally with the installed English model." else "Download the English model once from the main screen first.", color = Color(0xFF9AA8BC), style = MaterialTheme.typography.bodySmall)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Text("Automatic English subtitles", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+                Text(if (modelReady) "Generate timestamped SRT subtitles locally with the installed English model." else "Download the English model once from the main screen first.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 Button(enabled = modelReady && !busy, onClick = { player?.pause(); playing = false; onTranscribe(video) }, modifier = Modifier.fillMaxWidth()) { Text(if (busy) "Processing..." else "Generate subtitles") }
-                HorizontalDivider(color = Color(0xFF34445A))
-                Text("Thumbnail maker", color = Color.White, style = MaterialTheme.typography.titleMedium)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Text("Thumbnail maker", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
                 OutlinedTextField(value = title, onValueChange = { title = it.take(80) }, modifier = Modifier.fillMaxWidth(), label = { Text("Thumbnail title") }, singleLine = true)
                 Button(enabled = duration > 0L && !busy, onClick = { player?.pause(); playing = false; onThumbnail(video, title, position) }, modifier = Modifier.fillMaxWidth()) { Text("Create 1280 × 720 thumbnail") }
                 Button(onClick = { onShare(video) }, modifier = Modifier.fillMaxWidth()) { Text("Upload / share video…") }
