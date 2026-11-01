@@ -298,16 +298,17 @@ private class CaptionOverlay(
 ) : CanvasOverlay(true) {
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
     private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER; this.style = Paint.Style.STROKE; strokeJoin = Paint.Join.ROUND }
+    private val imagePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    // Decode once per export overlay, not once per rendered frame.
+    private val overlayBitmap = imageOverlay?.file?.let { android.graphics.BitmapFactory.decodeFile(it.absolutePath) }
     override fun onDraw(canvas: Canvas, presentationTimeUs: Long) {
         val ms = presentationTimeUs / 1000L
-        imageOverlay?.let { settings ->
-            val bitmap = android.graphics.BitmapFactory.decodeFile(settings.file.absolutePath)
-            if (bitmap != null) {
-                val w = canvas.width * settings.width; val h = canvas.height * settings.height
-                val left = canvas.width * settings.x - w / 2f; val top = canvas.height * settings.y - h / 2f
-                canvas.drawBitmap(bitmap, null, android.graphics.RectF(left, top, left + w, top + h), Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
-                bitmap.recycle()
-            }
+        val settings = imageOverlay
+        val bitmap = overlayBitmap
+        if (settings != null && bitmap != null) {
+            val w = canvas.width * settings.width; val h = canvas.height * settings.height
+            val left = canvas.width * settings.x - w / 2f; val top = canvas.height * settings.y - h / 2f
+            canvas.drawBitmap(bitmap, null, android.graphics.RectF(left, top, left + w, top + h), imagePaint)
         }
         val cue = cues.firstOrNull { ms >= it.start && ms <= it.end }
         if (cue != null) {
