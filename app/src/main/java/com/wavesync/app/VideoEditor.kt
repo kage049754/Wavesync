@@ -43,7 +43,7 @@ fun VideoEditorDialog(
                     }
                     TextButton(onClick = onDismiss) { Text("Close") }
                 }
-                AndroidView(Modifier.fillMaxWidth().height(215.dp), factory = { context ->
+                AndroidView(factory = { context ->
                     VideoView(context).apply {
                         layoutParams = ViewGroup.LayoutParams(-1, -1)
                         setVideoPath(video.absolutePath)
@@ -51,7 +51,7 @@ fun VideoEditorDialog(
                         setOnCompletionListener { playing = false }
                         player = this
                     }
-                }, update = { player = it })
+                }, modifier = Modifier.fillMaxWidth().height(215.dp), update = { player = it })
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = {
                         val view = player ?: return@Button
