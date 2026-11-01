@@ -30,7 +30,8 @@ ClipForge is designed for recording streams and gameplay, generating English sub
 - Import MP4 or other supported video files into the ClipForge library.
 - Re-encoded MP4 trim export through Media3 Transformer using the selected clip in/out points; frame accuracy and codec behavior still require physical-device verification.
 - Thumbnail generator creates a 1280 × 720 JPEG using a frame from the video and a user-supplied title.
-- Android share chooser for sending a video to YouTube or other installed destinations; direct YouTube account authorization and API upload are not implemented.
+- Direct YouTube upload UI uses Google Identity AuthorizationClient for the YouTube upload scope and YouTube Data API v3 resumable upload; Google Cloud OAuth app configuration and a real account/device upload test are still required.
+- Android share chooser remains available for other installed destinations.
 - Recordings can be copied to the public `Movies/ClipForge` gallery folder through Android MediaStore.
 - H.264 encoder capability checks select a supported resolution/frame-rate fallback when the requested combination is unavailable.
 - Offline English speech recognition using the Vosk Android engine.
@@ -75,3 +76,14 @@ Direct YouTube upload will require a Google Cloud project, YouTube Data API v3 e
 
 ## Compatibility and privacy
 MediaProjection requires explicit Android system consent for each capture session. Some apps prevent playback-audio capture. Actual frame rate and resolution depend on device display and hardware encoder support. The recorder stores originals in app-specific external storage; users can separately copy a recording to the public Movies/ClipForge media library. Recordings are not uploaded. The optional English model download is the only network step for the first offline transcription workflow; video and audio are processed locally.
+
+
+## Direct YouTube upload setup
+
+1. In Google Cloud Console, create/select a project and enable **YouTube Data API v3**.
+2. Configure the OAuth consent screen and add your Google account as a test user while the app is in testing.
+3. Create an **Android OAuth client** for package name `com.wavesync.app` and the SHA-1 signing certificate printed by the GitHub Actions **Print debug signing certificate SHA-1 for Google OAuth setup** step.
+4. Rebuild and install the APK produced by that same workflow after adding the SHA-1 to the Android OAuth client.
+5. In ClipForge, open a video editor → **Upload directly to YouTube** → authorize the Google account → set title, description and visibility → upload.
+
+The app requests only the `youtube.upload` scope. Access tokens are held in memory and are not written to disk. YouTube may restrict uploads from unverified OAuth projects to private visibility until the app completes Google's verification process. Uploading requires Google Play services and an internet connection. The current uploader sends a single resumable request body; automatic retry/resume after an interrupted transfer is a future hardening task.
