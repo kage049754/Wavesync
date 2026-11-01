@@ -19,6 +19,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
@@ -531,6 +532,6 @@ private fun validateSrt(content: String) {
     Row(verticalAlignment=Alignment.CenterVertically) {
         Icon(icon,null,tint=Cyan,modifier=Modifier.size(22.dp))
         Spacer(Modifier.width(12.dp))
-        Column { Text(title,fontWeight=FontWeight.SemiBold,fontSize=13.sp); Text(detail,color=muted,fontSize=10.sp) }
+        Column { Text(title,fontWeight=FontWeight.SemiBold,fontSize=13.sp); Text(detail,color=MaterialTheme.colorScheme.onSurfaceVariant,fontSize=10.sp) }
     }
 }
