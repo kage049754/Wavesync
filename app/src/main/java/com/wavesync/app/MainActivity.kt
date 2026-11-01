@@ -32,25 +32,27 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-private val bg = Color(0xFF090D16)
-private val card = Color(0xFF151E2D)
-private val Cyan = Color(0xFF61E6D2)
-private val Purple = Color(0xFF9B8CFF)
-private val muted = Color(0xFF9AA8BC)
+private val Cyan = Color(0xFF087F75)
+private val Purple = Color(0xFF6654B8)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = android.graphics.Color.rgb(9,13,22)
-        window.navigationBarColor = android.graphics.Color.rgb(9,13,22)
         setContent { ClipForgeApp(this) }
     }
 }
 
 @Composable
 private fun ClipForgeApp(activity: MainActivity) {
-    var fps by remember { mutableIntStateOf(60) }
-    var quality by remember { mutableStateOf("1080p") }
+    val preferences = remember { activity.getSharedPreferences("clipforge", Context.MODE_PRIVATE) }
+    var darkMode by remember { mutableStateOf(preferences.getBoolean("dark_mode", false)) }
+    var showSettings by remember { mutableStateOf(false) }
+    val bg = if (darkMode) Color(0xFF090D16) else Color(0xFFF5F7FA)
+    val card = if (darkMode) Color(0xFF151E2D) else Color.White
+    val muted = if (darkMode) Color(0xFF9AA8BC) else Color(0xFF5D6878)
+    val foreground = if (darkMode) Color(0xFFF4F7FB) else Color(0xFF17212F)
+    var fps by remember { mutableIntStateOf(preferences.getInt("default_fps", 60)) }
+    var quality by remember { mutableStateOf(preferences.getString("default_quality", "1080p") ?: "1080p") }
     var microphoneEnabled by remember { mutableStateOf(false) }
     var playbackAudioEnabled by remember { mutableStateOf(false) }
     var isRecording by remember { mutableStateOf(false) }
@@ -165,9 +167,18 @@ private fun ClipForgeApp(activity: MainActivity) {
         refreshRecordings()
     }
 
-    MaterialTheme(colorScheme = darkColorScheme(primary = Cyan, secondary = Purple, background = bg, surface = card)) {
+    SideEffect {
+        val bar = if (darkMode) android.graphics.Color.rgb(9,13,22) else android.graphics.Color.rgb(245,247,250)
+        activity.window.statusBarColor = bar
+        activity.window.navigationBarColor = bar
+        if (Build.VERSION.SDK_INT >= 26) activity.window.decorView.systemUiVisibility =
+            if (darkMode) 0 else android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+    }
+    val scheme = if (darkMode) darkColorScheme(primary = Color(0xFF61E6D2), secondary = Color(0xFFB5A8FF), background = bg, surface = card, onBackground = foreground, onSurface = foreground)
+        else lightColorScheme(primary = Color(0xFF087F75), secondary = Color(0xFF6654B8), background = bg, surface = card, onBackground = foreground, onSurface = foreground)
+    MaterialTheme(colorScheme = scheme) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF142238), bg, bg))),
+            modifier = Modifier.fillMaxSize().background(if (darkMode) Brush.verticalGradient(listOf(Color(0xFF142238), bg, bg)) else Brush.verticalGradient(listOf(Color(0xFFF5F7FA), bg, bg))),
             contentPadding = PaddingValues(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -181,16 +192,16 @@ private fun ClipForgeApp(activity: MainActivity) {
                         Text("ClipForge", fontSize=25.sp, fontWeight=FontWeight.Bold)
                         Text("RECORD • TRANSCRIBE • EDIT", color=muted, fontSize=9.sp, letterSpacing=1.5.sp)
                     }
-                    Surface(color=Purple.copy(alpha=.15f), shape=RoundedCornerShape(20.dp)) {
-                        Text("BETA", color=Purple, fontSize=10.sp, fontWeight=FontWeight.Bold, modifier=Modifier.padding(horizontal=10.dp, vertical=6.dp))
+                    IconButton(onClick = { showSettings = true }) {
+                        Icon(Icons.Rounded.Settings, contentDescription = "Settings", tint = foreground)
                     }
                 }
             }
             item {
-                Column(Modifier.fillMaxWidth().background(Brush.linearGradient(listOf(Color(0xFF233B54), Color(0xFF1B2038))), RoundedCornerShape(24.dp)).padding(20.dp)) {
+                Column(Modifier.fillMaxWidth().background(if (darkMode) Brush.linearGradient(listOf(Color(0xFF233B54), Color(0xFF1B2038))) else Brush.linearGradient(listOf(Color(0xFFE2F1EF), Color(0xFFE9E7F7))), RoundedCornerShape(24.dp)).padding(20.dp)) {
                     Text(if (isRecording) "RECORDING" else "SCREEN RECORDER", color=if(isRecording) Color(0xFFFF7777) else Cyan, fontSize=11.sp, fontWeight=FontWeight.Bold, letterSpacing=1.4.sp)
                     Spacer(Modifier.height(12.dp))
-                    Text(if (isRecording) "Capture in progress" else "Capture streams and gameplay", fontSize=22.sp, fontWeight=FontWeight.Bold)
+                    Text(if (isRecording) "Capture in progress" else "Capture streams and gameplay", fontSize=22.sp, fontWeight=FontWeight.Bold, color=foreground)
                     Spacer(Modifier.height(6.dp))
                     Text("1080p and 60 FPS are requested when supported by your display and hardware encoder.", color=muted, fontSize=12.sp, lineHeight=18.sp)
                     Spacer(Modifier.height(18.dp))
@@ -225,11 +236,11 @@ private fun ClipForgeApp(activity: MainActivity) {
                 Column(Modifier.fillMaxWidth().background(card, RoundedCornerShape(20.dp)).padding(16.dp), verticalArrangement=Arrangement.spacedBy(12.dp)) {
                     Text("Resolution", color=muted, fontSize=12.sp)
                     Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                        listOf("720p","1080p").forEach { v -> FilterChip(selected=quality==v,onClick={quality=v},label={Text(v)}) }
+                        listOf("720p","1080p").forEach { v -> FilterChip(selected=quality==v,onClick={quality=v; preferences.edit().putString("default_quality", v).apply()},label={Text(v)}) }
                     }
                     Text("Frame rate", color=muted, fontSize=12.sp)
                     Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                        listOf(30,60).forEach { v -> FilterChip(selected=fps==v,onClick={fps=v},label={Text("$v FPS")}) }
+                        listOf(30,60).forEach { v -> FilterChip(selected=fps==v,onClick={fps=v; preferences.edit().putInt("default_fps", v).apply()},label={Text("$v FPS")}) }
                     }
                     Row(verticalAlignment=Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
@@ -383,6 +394,36 @@ private fun ClipForgeApp(activity: MainActivity) {
                 Text("Capture depends on Android MediaProjection approval. Some streaming apps block playback-audio capture. Screen recording is not guaranteed to sustain 1080p at 60 FPS on every device.", color=muted, fontSize=10.sp, lineHeight=15.sp)
             }
         }
+        if (showSettings) {
+            AlertDialog(onDismissRequest = { showSettings = false }, title = { Text("Settings") },
+                text = {
+                    Column(Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(androidx.compose.foundation.rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("APPEARANCE", color = MaterialTheme.colorScheme.primary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("Theme", fontWeight = FontWeight.SemiBold)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = !darkMode, onClick = { darkMode = false; preferences.edit().putBoolean("dark_mode", false).apply() }); Text("Light")
+                            Spacer(Modifier.width(16.dp))
+                            RadioButton(selected = darkMode, onClick = { darkMode = true; preferences.edit().putBoolean("dark_mode", true).apply() }); Text("Dark")
+                        }
+                        Text("Light mode is the default. Your choice is saved on this device.", color = muted, fontSize = 12.sp)
+                        HorizontalDivider()
+                        Text("RECORDING DEFAULTS", color = MaterialTheme.colorScheme.primary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("Default resolution")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("720p","1080p").forEach { option -> FilterChip(selected = quality == option, onClick = { quality = option; preferences.edit().putString("default_quality", option).apply() }, label = { Text(option) }) } }
+                        Text("Default frame rate")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf(30,60).forEach { option -> FilterChip(selected = fps == option, onClick = { fps = option; preferences.edit().putInt("default_fps", option).apply() }, label = { Text("$option FPS") }) } }
+                        HorizontalDivider()
+                        Text("STORAGE & PRIVACY", color = MaterialTheme.colorScheme.primary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("Videos and sidecar files stay in ClipForge's app-specific Movies folder. Nothing uploads automatically. Transcription runs on-device after the English model is downloaded.", color = muted, fontSize = 12.sp, lineHeight = 18.sp)
+                        HorizontalDivider()
+                        Text("EDITOR STATUS", color = MaterialTheme.colorScheme.primary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("Trim remains fast keyframe-based sample copying. SRT files are not burned into video yet. Thumbnails now use the selected playback frame with a title overlay. Upload opens Android's share chooser; direct YouTube account integration is not available.", color = muted, fontSize = 12.sp, lineHeight = 18.sp)
+                        Text("Frame-accurate re-encoding, styled burned-in captions, a full multi-track timeline, video overlays and music mixing remain planned work.", color = muted, fontSize = 12.sp, lineHeight = 18.sp)
+                        Text("ClipForge • Version 1.1.0", color = muted, fontSize = 11.sp)
+                    }
+                },
+                confirmButton = { TextButton(onClick = { showSettings = false }) { Text("Done") } })
+        }
         if (editingVideo != null) {
             VideoEditorDialog(
                 video = editingVideo!!,
@@ -411,8 +452,8 @@ private fun ClipForgeApp(activity: MainActivity) {
                         }.onFailure { status = "Trim failed: " + (it.message ?: "unknown error") }
                     }
                 },
-                onThumbnail = { video, title ->
-                    VideoEditor.createThumbnail(video, title) { result ->
+                onThumbnail = { video, title, positionMs ->
+                    VideoEditor.createThumbnail(video, title, positionMs) { result ->
                         result.onSuccess { status = "Thumbnail saved: " + it.name }
                             .onFailure { status = "Thumbnail failed: " + (it.message ?: "unknown error") }
                     }
