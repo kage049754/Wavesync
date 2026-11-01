@@ -63,6 +63,7 @@ fun VideoEditorDialog(
     var overlayText by remember(video.absolutePath) { mutableStateOf("") }
     var player by remember { mutableStateOf<VideoView?>(null) }
     var playing by remember { mutableStateOf(false) }
+    var showYouTubeUpload by remember { mutableStateOf(false) }
     var music by remember { mutableStateOf<File?>(null) }
     var style by remember { mutableStateOf(SubtitleStyle()) }
     var subtitleFile by remember(video.absolutePath) {
@@ -178,9 +179,13 @@ fun VideoEditorDialog(
                 Button(enabled = modelReady && !busy, onClick = { player?.pause(); playing = false; onTranscribe(video) }, modifier = Modifier.fillMaxWidth()) { Text("Generate subtitles") }
                 OutlinedTextField(value = title, onValueChange = { title = it.take(80) }, modifier = Modifier.fillMaxWidth(), label = { Text("Thumbnail title") }, singleLine = true)
                 Button(enabled = duration > 0L && !busy, onClick = { player?.pause(); playing = false; onThumbnail(video, title, position) }, modifier = Modifier.fillMaxWidth()) { Text("Create 1280 × 720 thumbnail") }
-                Button(onClick = { onShare(video) }, modifier = Modifier.fillMaxWidth()) { Text("Upload / share video…") }
+                Button(onClick = { showYouTubeUpload = true }, modifier = Modifier.fillMaxWidth()) { Text("Upload directly to YouTube") }
+                OutlinedButton(onClick = { onShare(video) }, modifier = Modifier.fillMaxWidth()) { Text("Share with another app…") }
             }
         }
+    }
+    if (showYouTubeUpload) {
+        YouTubeUploadDialog(video = video, onDismiss = { showYouTubeUpload = false }, onStatus = { })
     }
 }
 
