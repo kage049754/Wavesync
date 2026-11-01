@@ -443,14 +443,16 @@ private fun ClipForgeApp(activity: MainActivity) {
                         }.onFailure { asrStatus = "Transcription failed: " + (it.message ?: "unknown error") }
                     }
                 },
-                onTrim = { video, startMs, endMs ->
-                    status = "Exporting trimmed clip..."
-                    VideoEditor.trim(video, startMs, endMs) { result ->
-                        result.onSuccess { trimmed ->
-                            status = "Trimmed clip saved: " + trimmed.name
+                onTrim = { video, startMs, endMs, music, subtitles, subtitleStyle, overlayText ->
+                    asrBusy = true
+                    status = "Rendering edited MP4 with re-encoded video..."
+                    VideoEditor.export(activity, video, startMs, endMs, music, subtitles, subtitleStyle, overlayText) { result ->
+                        asrBusy = false
+                        result.onSuccess { edited ->
+                            status = "Edited video exported: " + edited.name
                             refreshRecordings()
-                            editingVideo = trimmed
-                        }.onFailure { status = "Trim failed: " + (it.message ?: "unknown error") }
+                            editingVideo = edited
+                        }.onFailure { status = "Video export failed: " + (it.message ?: "unknown error") }
                     }
                 },
                 onThumbnail = { video, title, positionMs ->
