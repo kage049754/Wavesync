@@ -9,7 +9,11 @@ ClipForge is designed for recording streams and gameplay, generating English sub
 ### Planned workflow
 1. Record the screen at 720p/1080p and 30/60 FPS when the device supports the selected encoder configuration.
 2. Capture microphone audio optionally, or enable Android 10+ internal playback capture when the source app permits it. Internal audio is captured to a WAV sidecar and then encoded to AAC and muxed into the MP4 after recording when the device supports it; the WAV is retained as a fallback.
-3. Generate live English captions while recording.
+3. Import a video into ClipForge or select a recording from the in-app library.
+4. Play videos in the built-in editor, select a trim range and export a separate MP4 clip.
+5. Generate English SRT subtitles locally with the installed Vosk model, then correct and export them.
+6. Create a 1280 × 720 thumbnail from a video frame with a custom title.
+7. Share the MP4 through Android's upload/share chooser to YouTube or another supported app.
 4. Run a post-recording transcription correction pass for better words and timestamps.
 5. Edit subtitle text, timing, font, size, color, outline, position and animation.
 6. Trim/split video, add outro cards and overlays, and export MP4 plus SRT.
@@ -22,7 +26,11 @@ ClipForge is designed for recording streams and gameplay, generating English sub
 - Optional Android 10+ playback capture uses AudioPlaybackCapture for media/game/unknown usages when the source app allows capture; it writes a separate 44.1 kHz stereo PCM WAV beside the MP4. The WAV can be opened from the recording row. After recording, ClipForge converts the WAV to AAC and adds it as an MP4 audio track. If muxing fails, the original MP4 is preserved and the WAV remains available.
 - Recording notification with Stop action.
 - Files saved under the app-specific Movies/ClipForge directory.
-- Saved MP4s can be opened in an installed video player through a temporary read-only FileProvider URI.
+- Built-in video playback and a basic editor screen; recordings no longer need to open in a separate player.
+- Import MP4 or other supported video files into the ClipForge library.
+- Basic lossless trim export using MediaExtractor/MediaMuxer; the selected start may move back to the nearest keyframe.
+- Thumbnail generator creates a 1280 × 720 JPEG using a frame from the video and a user-supplied title.
+- Android share/upload chooser for sending a video to YouTube or other installed destinations; this is not direct YouTube account/API upload.
 - Recordings can be copied to the public `Movies/ClipForge` gallery folder through Android MediaStore.
 - H.264 encoder capability checks select a supported resolution/frame-rate fallback when the requested combination is unavailable.
 - Offline English speech recognition using the Vosk Android engine.
@@ -39,7 +47,9 @@ ClipForge is designed for recording streams and gameplay, generating English sub
 - [ ] Live English speech recognition with timestamped caption segments.
 - [ ] Improve transcription accuracy and add correction assistance.
 - [ ] Visual subtitle styling and on-video preview.
-- [ ] Timeline editor: trim, split, overlays, outro and audio mix.
+- [x] Built-in playback and basic trim export.
+- [x] Import video, generate local English SRT subtitles, create a basic thumbnail and share/upload through Android chooser.
+- [ ] Full multi-track timeline, frame-accurate re-encoded cuts, visual subtitle burn-in/styling, overlays, outro and audio mix.
 - [ ] Export presets and device capability detection.
 
 ## Compatibility and privacy
