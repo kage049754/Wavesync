@@ -37,6 +37,10 @@ import androidx.media3.transformer.Transformer
 import java.io.File
 import java.util.concurrent.Executors
 
+data class TimelineClip(val id: Long, val sourceStartMs: Long, val sourceEndMs: Long, val timelineStartMs: Long)
+data class ImageOverlaySettings(val file: File, val x: Float = .5f, val y: Float = .5f, val width: Float = .3f, val height: Float = .3f)
+data class AudioMixSettings(val originalVolume: Float = 1f, val musicVolume: Float = .7f, val fadeInMs: Long = 0L, val fadeOutMs: Long = 0L)
+
 data class SubtitleStyle(
     val sizeSp: Float = 28f,
     val textColor: Int = android.graphics.Color.WHITE,
@@ -51,7 +55,7 @@ data class SubtitleStyle(
 fun VideoEditorDialog(
     video: File, modelReady: Boolean, busy: Boolean, onDismiss: () -> Unit,
     onTranscribe: (File) -> Unit,
-    onTrim: (File, Long, Long, File?, File?, SubtitleStyle, String) -> Unit,
+    onTrim: (File, List<TimelineClip>, File?, File?, SubtitleStyle, String, ImageOverlaySettings?, AudioMixSettings) -> Unit,
     onThumbnail: (File, String, Long) -> Unit, onShare: (File) -> Unit
 ) {
     val context = LocalContext.current
@@ -59,6 +63,13 @@ fun VideoEditorDialog(
     var position by remember(video.absolutePath) { mutableLongStateOf(0L) }
     var trimStart by remember(video.absolutePath) { mutableFloatStateOf(0f) }
     var trimEnd by remember(video.absolutePath) { mutableFloatStateOf(0f) }
+    var clips by remember(video.absolutePath) { mutableStateOf<List<TimelineClip>>(emptyList()) }
+    var selectedClip by remember { mutableIntStateOf(0) }
+    var imageOverlay by remember { mutableStateOf<ImageOverlaySettings?>(null) }
+    var originalVolume by remember { mutableFloatStateOf(1f) }
+    var musicVolume by remember { mutableFloatStateOf(.7f) }
+    var fadeInSeconds by remember { mutableFloatStateOf(0f) }
+    var fadeOutSeconds by remember { mutableFloatStateOf(0f) }
     var title by remember(video.absolutePath) { mutableStateOf(video.nameWithoutExtension.take(42)) }
     var overlayText by remember(video.absolutePath) { mutableStateOf("") }
     var player by remember { mutableStateOf<VideoView?>(null) }
@@ -70,6 +81,13 @@ fun VideoEditorDialog(
         mutableStateOf(File(video.parentFile, video.nameWithoutExtension + ".srt").takeIf { it.exists() })
     }
     val maxDuration = duration.coerceAtLeast(1L).toFloat()
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) runCatching {
+            val target = File(video.parentFile, video.nameWithoutExtension + "_overlay_" + System.currentTimeMillis() + ".img")
+            context.contentResolver.openInputStream(uri)?.use { input -> target.outputStream().use { input.copyTo(it) } } ?: error("Cannot read image")
+            imageOverlay = ImageOverlaySettings(target)
+        }
+    }
     val musicPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             runCatching {
@@ -96,7 +114,7 @@ fun VideoEditorDialog(
                     VideoView(ctx).apply {
                         layoutParams = ViewGroup.LayoutParams(-1, -1)
                         setVideoPath(video.absolutePath)
-                        setOnPreparedListener { media -> duration = media.duration.toLong().coerceAtLeast(0L); trimEnd = duration.toFloat() }
+                        setOnPreparedListener { media -> duration = media.duration.toLong().coerceAtLeast(0L); trimEnd = duration.toFloat(); if (clips.isEmpty()) clips = listOf(TimelineClip(System.nanoTime(), 0L, duration, 0L)) }
                         setOnCompletionListener { playing = false }
                         player = this
                     }
@@ -114,8 +132,36 @@ fun VideoEditorDialog(
                 Text("Playhead  ${clock(position)} / ${clock(duration)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Slider(value = position.coerceIn(0L, duration.coerceAtLeast(1L)).toFloat(), onValueChange = { position = it.toLong(); player?.seekTo(position.toInt()) }, valueRange = 0f..maxDuration)
                 HorizontalDivider()
-                Text("MULTI-TRACK TIMELINE", style = MaterialTheme.typography.titleMedium)
-                TimelineLane("VIDEO", video.name, trimStart.toLong(), trimEnd.toLong(), duration)
+                Text("VIDEO CLIPS • SEQUENTIAL TIMELINE", style = MaterialTheme.typography.titleMedium)
+                clips.forEachIndexed { index, clip ->
+                    Card {
+                        Column(Modifier.fillMaxWidth().padding(8.dp)) {
+                            Text("Clip " + (index + 1) + " • " + clock(clip.sourceStartMs) + "–" + clock(clip.sourceEndMs) + " • at " + clock(clip.timelineStartMs))
+                            Row {
+                                TextButton(onClick = { selectedClip = index; position = clip.sourceStartMs; player?.seekTo(position.toInt()) }) { Text("Select") }
+                                TextButton(enabled = index > 0, onClick = { clips = reorderClips(clips, index, index - 1); selectedClip = index - 1 }) { Text("←") }
+                                TextButton(enabled = index < clips.lastIndex, onClick = { clips = reorderClips(clips, index, index + 1); selectedClip = index + 1 }) { Text("→") }
+                                TextButton(enabled = clips.size > 1, onClick = { clips = clips.filterIndexed { i, _ -> i != index }.resequence(); selectedClip = (index - 1).coerceAtLeast(0) }) { Text("Delete") }
+                            }
+                        }
+                    }
+                }
+                Row {
+                    Button(enabled = clips.isNotEmpty() && position > 0L && position < duration, onClick = {
+                        val i = selectedClip.coerceIn(0, clips.lastIndex); val clip = clips[i]
+                        if (position > clip.sourceStartMs && position < clip.sourceEndMs) {
+                            clips = clips.toMutableList().also { it[i] = clip.copy(sourceEndMs = position); it.add(i + 1, TimelineClip(System.nanoTime(), position, clip.sourceEndMs, 0L)) }.resequence()
+                            selectedClip = i + 1
+                        }
+                    }) { Text("Split at playhead") }
+                    TextButton(onClick = { clips = listOf(TimelineClip(System.nanoTime(), 0L, duration, 0L)); selectedClip = 0 }) { Text("Reset") }
+                }
+                val activeClip = clips.getOrNull(selectedClip)
+                Text("Trim selected clip")
+                Text("In: " + (activeClip?.let { clock(it.sourceStartMs) } ?: "--"))
+                Slider(value = (activeClip?.sourceStartMs ?: 0L).toFloat().coerceIn(0f, maxDuration), onValueChange = { v -> activeClip?.let { old -> clips = clips.toMutableList().also { it[selectedClip] = old.copy(sourceStartMs = v.toLong().coerceAtMost(old.sourceEndMs - 250L)) }.resequence() } }, valueRange = 0f..maxDuration)
+                Text("Out: " + (activeClip?.let { clock(it.sourceEndMs) } ?: "--"))
+                Slider(value = (activeClip?.sourceEndMs ?: duration).toFloat().coerceIn(0f, maxDuration), onValueChange = { v -> activeClip?.let { old -> clips = clips.toMutableList().also { it[selectedClip] = old.copy(sourceEndMs = v.toLong().coerceAtLeast(old.sourceStartMs + 250L)) }.resequence() } }, valueRange = 0f..maxDuration)
                 TimelineLane("SUBTITLES", subtitleFile?.name ?: "No SRT loaded", trimStart.toLong(), trimEnd.toLong(), duration)
                 TimelineLane("OVERLAY", overlayText.ifBlank { "No text overlay" }, trimStart.toLong(), trimEnd.toLong(), duration)
                 TimelineLane("MUSIC", music?.name ?: "No music track", 0L, duration, duration)
@@ -162,6 +208,21 @@ fun VideoEditorDialog(
                     TextButton(onClick = { subtitleFile = null }) { Text("No subtitles") }
                 }
                 HorizontalDivider()
+                Text("IMAGE OVERLAY", style = MaterialTheme.typography.titleMedium)
+                Row {
+                    OutlinedButton(onClick = { imagePicker.launch(arrayOf("image/*")) }) { Text("Import image") }
+                    TextButton(onClick = { imageOverlay?.file?.delete(); imageOverlay = null }) { Text("Remove") }
+                }
+                imageOverlay?.let { image ->
+                    Text("X position: " + (image.x * 100).toInt() + "%")
+                    Slider(value = image.x, onValueChange = { imageOverlay = image.copy(x = it) }, valueRange = 0f..1f)
+                    Text("Y position: " + (image.y * 100).toInt() + "%")
+                    Slider(value = image.y, onValueChange = { imageOverlay = image.copy(y = it) }, valueRange = 0f..1f)
+                    Text("Width: " + (image.width * 100).toInt() + "%")
+                    Slider(value = image.width, onValueChange = { imageOverlay = image.copy(width = it) }, valueRange = .05f..1f)
+                    Text("Height: " + (image.height * 100).toInt() + "%")
+                    Slider(value = image.height, onValueChange = { imageOverlay = image.copy(height = it) }, valueRange = .05f..1f)
+                }
                 Text("OVERLAY & AUDIO TRACKS", style = MaterialTheme.typography.titleMedium)
                 OutlinedTextField(value = overlayText, onValueChange = { overlayText = it.take(120) }, modifier = Modifier.fillMaxWidth(), label = { Text("Text overlay (burned into video)") }, singleLine = true)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -169,9 +230,17 @@ fun VideoEditorDialog(
                     TextButton(onClick = { music = null }) { Text("Remove music") }
                 }
                 Text(music?.name ?: "No background music selected", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                Text("Original audio volume: " + (originalVolume * 100).toInt() + "%")
+                Slider(value = originalVolume, onValueChange = { originalVolume = it }, valueRange = 0f..2f)
+                Text("Music volume: " + (musicVolume * 100).toInt() + "%")
+                Slider(value = musicVolume, onValueChange = { musicVolume = it }, valueRange = 0f..2f)
+                Text("Music fade-in: " + fadeInSeconds.toInt() + " seconds")
+                Slider(value = fadeInSeconds, onValueChange = { fadeInSeconds = it }, valueRange = 0f..10f)
+                Text("Music fade-out: " + fadeOutSeconds.toInt() + " seconds")
+                Slider(value = fadeOutSeconds, onValueChange = { fadeOutSeconds = it }, valueRange = 0f..10f)
                 HorizontalDivider()
                 Text("EXPORT", style = MaterialTheme.typography.titleMedium)
-                Button(enabled = duration > 0L && trimEnd - trimStart >= 250f && !busy, onClick = { player?.pause(); playing = false; onTrim(video, trimStart.toLong(), trimEnd.toLong(), music, subtitleFile, style, overlayText) }, modifier = Modifier.fillMaxWidth()) { Text(if (busy) "Rendering…" else "Render edited MP4") }
+                Button(enabled = duration > 0L && trimEnd - trimStart >= 250f && !busy, onClick = { player?.pause(); playing = false; onTrim(video, clips, music, subtitleFile, style, overlayText, imageOverlay, AudioMixSettings(originalVolume, musicVolume, (fadeInSeconds * 1000).toLong(), (fadeOutSeconds * 1000).toLong())) }, modifier = Modifier.fillMaxWidth()) { Text(if (busy) "Rendering…" else "Render edited MP4") }
                 Text("This export re-encodes video at the selected in/out points, burns styled SRT captions and text overlay into the frames, and mixes the optional music track.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 HorizontalDivider()
                 Text("Automatic English subtitles", style = MaterialTheme.typography.titleMedium)
@@ -224,12 +293,22 @@ private fun parseSrt(file: File?): List<Cue> {
 private class CaptionOverlay(
     private val cues: List<Cue>,
     private val style: SubtitleStyle,
-    private val title: String
+    private val title: String,
+    private val imageOverlay: ImageOverlaySettings? = null
 ) : CanvasOverlay(true) {
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
     private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER; this.style = Paint.Style.STROKE; strokeJoin = Paint.Join.ROUND }
     override fun onDraw(canvas: Canvas, presentationTimeUs: Long) {
         val ms = presentationTimeUs / 1000L
+        imageOverlay?.let { settings ->
+            val bitmap = android.graphics.BitmapFactory.decodeFile(settings.file.absolutePath)
+            if (bitmap != null) {
+                val w = canvas.width * settings.width; val h = canvas.height * settings.height
+                val left = canvas.width * settings.x - w / 2f; val top = canvas.height * settings.y - h / 2f
+                canvas.drawBitmap(bitmap, null, android.graphics.RectF(left, top, left + w, top + h), Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
+                bitmap.recycle()
+            }
+        }
         val cue = cues.firstOrNull { ms >= it.start && ms <= it.end }
         if (cue != null) {
             val duration = (cue.end - cue.start).coerceAtLeast(1L).toFloat()
@@ -271,21 +350,21 @@ object VideoEditor {
 
     @OptIn(UnstableApi::class)
     fun export(
-        context: Context, source: File, startMs: Long, endMs: Long, music: File?,
-        subtitles: File?, style: SubtitleStyle, overlayText: String,
+        context: Context, source: File, clips: List<TimelineClip>, music: File?,
+        subtitles: File?, style: SubtitleStyle, overlayText: String, imageOverlay: ImageOverlaySettings?, audioMix: AudioMixSettings,
         complete: (Result<File>) -> Unit
     ) {
         executor.execute {
             val output = File(source.parentFile, source.nameWithoutExtension + "_edit_" + System.currentTimeMillis() + ".mp4")
             val result = runCatching {
-                require(source.isFile && endMs > startMs) { "Invalid video or edit range" }
-                val clipping = MediaItem.ClippingConfiguration.Builder().setStartPositionMs(startMs).setEndPositionMs(endMs).build()
-                val mediaItem = MediaItem.Builder().setUri(Uri.fromFile(source)).setClippingConfiguration(clipping).build()
-                val overlays = CaptionOverlay(parseSrt(subtitles), style, overlayText)
-                val videoItem = EditedMediaItem.Builder(mediaItem)
-                    .setEffects(Effects(emptyList(), listOf(OverlayEffect(listOf(overlays)))))
-                    .build()
-                val videoSequence = EditedMediaItemSequence.withAudioAndVideoFrom(listOf(videoItem))
+                require(source.isFile && clips.isNotEmpty() && clips.all { it.sourceEndMs > it.sourceStartMs }) { "Invalid clip timeline" }
+                val overlays = CaptionOverlay(parseSrt(subtitles), style, overlayText, imageOverlay)
+                val videoItems = clips.map { clip ->
+                    val clipping = MediaItem.ClippingConfiguration.Builder().setStartPositionMs(clip.sourceStartMs).setEndPositionMs(clip.sourceEndMs).build()
+                    val item = MediaItem.Builder().setUri(Uri.fromFile(source)).setClippingConfiguration(clipping).build()
+                    EditedMediaItem.Builder(item).setEffects(Effects(emptyList(), listOf(OverlayEffect(listOf(overlays))))).build()
+                }
+                val videoSequence = EditedMediaItemSequence.withAudioAndVideoFrom(videoItems)
                 val composition = if (music != null && music.isFile) {
                     val audioItem = EditedMediaItem.Builder(MediaItem.fromUri(Uri.fromFile(music))).build()
                     val audioSequence = EditedMediaItemSequence.withAudioFrom(listOf(audioItem)).buildUpon().setIsLooping(true).build()
@@ -335,6 +414,14 @@ object VideoEditor {
             android.os.Handler(android.os.Looper.getMainLooper()).post { complete(result) }
         }
     }
+}
+
+private fun reorderClips(items: List<TimelineClip>, from: Int, to: Int): List<TimelineClip> =
+    items.toMutableList().also { val moved = it.removeAt(from); it.add(to, moved) }.resequence()
+
+private fun List<TimelineClip>.resequence(): List<TimelineClip> {
+    var cursor = 0L
+    return map { clip -> clip.copy(timelineStartMs = cursor).also { cursor += clip.sourceEndMs - clip.sourceStartMs } }
 }
 
 private fun clock(ms: Long): String {
