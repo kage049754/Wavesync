@@ -183,7 +183,7 @@ fun VideoEditorDialog(
                 Text("In: " + (activeClip?.let { clock(it.sourceStartMs) } ?: "--"))
                 Slider(value = (activeClip?.sourceStartMs ?: 0L).toFloat().coerceIn(0f, maxDuration), onValueChange = { v -> activeClip?.let { old -> clips = clips.toMutableList().also { it[selectedClip] = old.copy(sourceStartMs = v.toLong().coerceAtMost(old.sourceEndMs - 250L)) } } }, valueRange = 0f..maxDuration)
                 Text("Out: " + (activeClip?.let { clock(it.sourceEndMs) } ?: "--"))
-                Slider(value = (activeClip?.sourceEndMs ?: duration).toFloat().coerceIn(0f, maxDuration), onValueChange = { v -> activeClip?.let { old -> clips = clips.toMutableList().also { it[selectedClip] = old.copy(sourceEndMs = v.toLong().coerceAtLeast(old.sourceStartMs + 250L)) }.resequence() } }, valueRange = 0f..maxDuration)
+                Slider(value = (activeClip?.sourceEndMs ?: duration).toFloat().coerceIn(0f, maxDuration), onValueChange = { v -> activeClip?.let { old -> clips = clips.toMutableList().also { it[selectedClip] = old.copy(sourceEndMs = v.toLong().coerceAtLeast(old.sourceStartMs + 250L)) } } }, valueRange = 0f..maxDuration)
                 TimelineLane("SUBTITLES", subtitleFile?.name ?: "No SRT loaded", trimStart.toLong(), trimEnd.toLong(), duration)
                 TimelineLane("OVERLAY", overlayText.ifBlank { "No text overlay" }, trimStart.toLong(), trimEnd.toLong(), duration)
                 TimelineLane("MUSIC", music?.name ?: "No music track", 0L, duration, duration)
